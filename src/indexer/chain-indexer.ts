@@ -13,7 +13,7 @@ const MAX_BACKOFF_DELAY = 60000; // Maximum backoff delay of 60 seconds
 
 interface ProcessedEvent {
     contract: string;
-    event: ethers.EventLog & { eventName: string };
+    event: ethers.EventLog;
     args: Result;
     blockTimestamp: number;
 }
@@ -243,7 +243,7 @@ export class ChainIndexer {
         return timestamp;
     }
 
-    private async fetchBlockTimestamps(events: (ethers.EventLog & { eventName: string })[]): Promise<Map<number, number>> {
+    private async fetchBlockTimestamps(events: ethers.EventLog[]): Promise<Map<number, number>> {
         const blockNumbers = [...new Set(events.map(event => event.blockNumber))];
         const timestamps = new Map<number, number>();
 
@@ -259,21 +259,15 @@ export class ChainIndexer {
 
     private async processBatch(startBlock: number, endBlock: number, retryCount: number = 0): Promise<void> {
         try {
-            // Fetch all events in parallel and add eventName
-            const xenLogs = await this.contracts?.xen.queryFilter('Transfer', startBlock, endBlock) || [];
-            const burnLogs = await this.contracts?.burn.queryFilter('XENBurned', startBlock, endBlock) || [];
-            const nftLogs = await this.contracts?.nft.queryFilter('BurnLockCreated', startBlock, endBlock) || [];
-            const swapLogs = await this.contracts?.burn.queryFilter('SwapAndBurn', startBlock, endBlock) || [];
-            const liquidityLogs = await this.contracts?.burn.queryFilter('LiquidityAdded', startBlock, endBlock) || [];
-
-            const xenEvents = xenLogs.map((log: ethers.EventLog) => ({ ...log, eventName: 'Transfer' }));
-            const burnEvents = burnLogs.map((log: ethers.EventLog) => ({ ...log, eventName: 'XENBurned' }));
-            const nftEvents = nftLogs.map((log: ethers.EventLog) => ({ ...log, eventName: 'BurnLockCreated' }));
-            const swapEvents = swapLogs.map((log: ethers.EventLog) => ({ ...log, eventName: 'SwapAndBurn' }));
-            const liquidityEvents = liquidityLogs.map((log: ethers.EventLog) => ({ ...log, eventName: 'LiquidityAdded' }));
+            // Fetch all events in parallel
+            const xenEvents: ethers.EventLog[] = (await this.contracts?.xen.queryFilter('Transfer', startBlock, endBlock)) as ethers.EventLog[] || [];
+            const burnEvents: ethers.EventLog[] = (await this.contracts?.burn.queryFilter('XENBurned', startBlock, endBlock)) as ethers.EventLog[] || [];
+            const nftEvents: ethers.EventLog[] = (await this.contracts?.nft.queryFilter('BurnLockCreated', startBlock, endBlock)) as ethers.EventLog[] || [];
+            const swapEvents: ethers.EventLog[] = (await this.contracts?.burn.queryFilter('SwapAndBurn', startBlock, endBlock)) as ethers.EventLog[] || [];
+            const liquidityEvents: ethers.EventLog[] = (await this.contracts?.burn.queryFilter('LiquidityAdded', startBlock, endBlock)) as ethers.EventLog[] || [];
 
             // Get timestamps for all blocks at once
-            const allEvents = [...xenEvents, ...burnEvents, ...nftEvents, ...swapEvents, ...liquidityEvents];
+            const allEvents: ethers.EventLog[] = [...xenEvents, ...burnEvents, ...nftEvents, ...swapEvents, ...liquidityEvents];
             const blockTimestamps = await this.fetchBlockTimestamps(allEvents);
 
             // Process events in batches of 100 to avoid memory issues
@@ -298,8 +292,8 @@ export class ChainIndexer {
 
                     return {
                         contract,
-                        event: event as ethers.EventLog & { eventName: string },
-                        args: (event as ethers.EventLog).args,
+                        event: event,
+                        args: event.args,
                         blockTimestamp: timestamp
                     };
                 });
