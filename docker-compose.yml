@@ -1,0 +1,112 @@
+version: '3.8'
+networks:
+  xburn_network:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: xen_burn_analytics
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - xburn_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  init:
+    build: .
+    command: ./init.sh
+    networks:
+      - xburn_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  metabase:
+    image: metabase/metabase
+    ports:
+      - "3001:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - xburn_network
+    restart: unless-stopped
+
+  indexer:
+    build: .
+    environment:
+      # Database configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=xen_burn_analytics
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_SSL=false
+      
+      # Base Chain
+      - BASE_RPC_URL=${BASE_RPC_URL}
+      - START_BLOCK_BASE=${START_BLOCK_BASE:-29193678}
+      
+      # Ethereum Chain
+      - ETH_RPC_URL=${ETH_RPC_URL}
+      - START_BLOCK_ETHEREUM=${START_BLOCK_ETHEREUM:-17000000}
+      
+      # Polygon Chain
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL}
+      - START_BLOCK_POLYGON=${START_BLOCK_POLYGON:-45000000}
+      
+      # Optimism Chain
+      - OPTIMISM_RPC_URL=${OPTIMISM_RPC_URL}
+      - START_BLOCK_OPTIMISM=${START_BLOCK_OPTIMISM:-108000000}
+      
+      # PulseChain
+      - PULSECHAIN_RPC_URL=${PULSECHAIN_RPC_URL}
+      - START_BLOCK_PULSECHAIN=${START_BLOCK_PULSECHAIN:-17000000}
+      
+      # BSC
+      - BSC_RPC_URL=${BSC_RPC_URL}
+      - START_BLOCK_BSC=${START_BLOCK_BSC:-28000000}
+      
+      # Avalanche
+      - AVALANCHE_RPC_URL=${AVALANCHE_RPC_URL}
+      - START_BLOCK_AVALANCHE=${START_BLOCK_AVALANCHE:-30000000}
+      
+      # Enable all chains by default
+      - ENABLED_CHAINS=base,ethereum,polygon,optimism,pulsechain,bsc,avalanche
+      
+      # Indexer configuration
+      - INDEXER_INTERVAL_MS=15000
+      - BATCH_SIZE=5
+      - MAX_RETRIES=10
+      - RETRY_DELAY=5000
+      - MAX_BACKOFF_DELAY=60000
+      
+      # Application settings
+      - API_PORT=3000
+      - LOG_LEVEL=info
+    ports:
+      - "3000:3000"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    networks:
+      - xburn_network
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
+
+volumes:
+  postgres_data: 
