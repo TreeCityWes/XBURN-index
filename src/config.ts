@@ -18,6 +18,7 @@ export interface ChainConfig {
   };
   startBlock: number;
   gasPrice?: string;
+  batchSize?: number;
 }
 
 export const chains: { [key: string]: ChainConfig } = {
@@ -92,7 +93,8 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnNft: '0xd7dd1997ed8d5b836099e5d28fed1a9d8e9cc723'
     },
     startBlock: 135077350,
-    gasPrice: '0.0001'
+    gasPrice: '0.0001',
+    batchSize: 50
   },
   pulsechain: {
     id: 369,
@@ -128,8 +130,9 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0x12cf65e044a59e85f38497c413f24de6d33250ba',
       xburnNft: '0xf0ca18f2462936df8332f88c4cf27a03d829dbb2'
     },
-    startBlock: 50000000,
-    gasPrice: '0.1'
+    startBlock: 50300000,
+    gasPrice: '0.1',
+    batchSize: 50
   },
   avalanche: {
     id: 43114,

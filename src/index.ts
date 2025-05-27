@@ -1,75 +1,51 @@
 import { Pool } from 'pg';
 import { logger } from './utils/logger';
-import { chains } from './config';
+import { chains, dbConfig } from './config';
 import { RPCProvider } from './provider';
-import { ChainIndexer } from './indexer/chain-indexer';
+import { ChainIndexer, ensureSchemaIsApplied } from './indexer/chain-indexer';
 import { IndexerHealthMonitor } from './indexer/health';
-
-// Database configuration
-const dbConfig = {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    database: process.env.DB_NAME || 'xen_burn_analytics',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    ssl: process.env.DB_SSL === 'true'
-};
 
 class IndexerManager {
     private db: Pool;
-    private indexers: Map<string, ChainIndexer>;
     private providers: Map<string, RPCProvider>;
-    private healthMonitor: IndexerHealthMonitor;
+    private indexers: Map<string, ChainIndexer>;
+    private healthMonitor: IndexerHealthMonitor | null = null;
+    private enabledChains: string[];
 
     constructor() {
         this.db = new Pool(dbConfig);
-        this.indexers = new Map();
         this.providers = new Map();
-        this.healthMonitor = new IndexerHealthMonitor(this.db, new Map());
+        this.indexers = new Map();
+
+        // Parse enabled chains from environment variable
+        const enabledChainsEnv = process.env.ENABLED_CHAINS || '';
+        this.enabledChains = enabledChainsEnv 
+            ? enabledChainsEnv.split(',')
+            : Object.keys(chains);
+
+        logger.info(`ENABLED_CHAINS: ${enabledChainsEnv}, effective enabledChains: ${this.enabledChains.join(',')}`);
     }
 
     async start() {
         try {
-            // Initialize database connection
-            await this.db.query('SELECT NOW()');
+            await this.db.connect();
             logger.info('Database connection established');
 
-            // Get enabled chains from environment variable or use all chains
-            const enabledChains = process.env.ENABLED_CHAINS?.toLowerCase().split(',') || Object.keys(chains);
-            logger.info(`ENABLED_CHAINS: ${process.env.ENABLED_CHAINS}, effective enabledChains: ${enabledChains.join(',')}`);
-            
+            // Ensure the schema is applied
+            await ensureSchemaIsApplied(this.db);
+
             // Initialize providers and indexers for each chain
-            for (const chainName of enabledChains) {
-                logger.info(`Attempting to initialize indexer for chain: ${chainName}`);
-                const chainConfig = chains[chainName];
-                if (!chainConfig) {
-                    logger.warn(`Chain ${chainName} not found in configuration`);
-                    continue;
-                }
-
-                try {
-                    // Initialize provider with health monitoring
-                    const provider = new RPCProvider(chainConfig);
-                    this.providers.set(chainConfig.id.toString(), provider);
-
-                    // Initialize and start indexer
-                    const indexer = new ChainIndexer(chainConfig, provider, this.db);
-                    this.indexers.set(chainConfig.id.toString(), indexer);
-
-                    // Start indexing
-                    indexer.start().then(() => {
-                        logger.info(`Started indexer for ${chainName}`);
-                    }).catch(error => {
-                        logger.error(`Error starting indexer for ${chainName}:`, error);
-                    });
-
-                } catch (error) {
-                    logger.error(`Error initializing chain ${chainName}:`, error);
-                }
+            for (const chainKey of this.enabledChains) {
+                await this.initializeChain(chainKey);
             }
 
             // Start health monitoring
             await this.startHealthMonitoring();
+
+            // Start all indexers
+            for (const [chainId, indexer] of this.indexers.entries()) {
+                await indexer.start();
+            }
 
         } catch (error) {
             logger.error('Error starting indexer manager:', error);
@@ -88,26 +64,49 @@ class IndexerManager {
         logger.info('Stopping indexer manager...');
 
         // Stop all indexers
-        for (const [chainId, indexer] of this.indexers.entries()) {
-            try {
-                await indexer.stop();
-                logger.info(`Stopped indexer for chain ${chainId}`);
-            } catch (error) {
-                logger.error(`Error stopping indexer for chain ${chainId}:`, error);
-            }
+        for (const indexer of this.indexers.values()) {
+            await indexer.stop();
         }
 
-        // Stop health monitoring
-        this.healthMonitor.cleanup();
-
-        // Cleanup providers
-        for (const provider of this.providers.values()) {
-            provider.cleanup();
+        // Stop health monitor
+        if (this.healthMonitor) {
+            this.healthMonitor.cleanup();
         }
 
         // Close database connection
         await this.db.end();
         logger.info('Indexer manager stopped');
+    }
+
+    private async initializeChain(chainKey: string) {
+        const chainConfig = chains[chainKey];
+        if (!chainConfig) {
+            logger.warn(`No configuration found for chain key: ${chainKey}`);
+            return;
+        }
+
+        try {
+            const chainId = chainConfig.id.toString();
+            logger.info(`Attempting to initialize indexer for chain: ${chainKey}`);
+
+            // Initialize provider
+            const provider = new RPCProvider(chainId, chainConfig.name, chainConfig.rpcUrls);
+            this.providers.set(chainId, provider);
+
+            // Create indexer instance
+            const indexer = new ChainIndexer(chainId, provider, this.db, chainConfig);
+            this.indexers.set(chainId, indexer);
+
+            // Ensure chain exists in database
+            await this.ensureChainExists(chainId, chainConfig);
+
+        } catch (error) {
+            logger.error(`Error initializing chain ${chainKey}:`, error);
+        }
+    }
+
+    private async ensureChainExists(chainId: string, chainConfig: ChainConfig) {
+        // Implementation of ensureChainExists method
     }
 }
 

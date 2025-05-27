@@ -4,6 +4,8 @@ import { logger } from '../utils/logger';
 import { RPCProvider } from '../provider';
 import { ChainConfig } from '../config';
 import { indexerConfig } from '../config';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const REORG_DEPTH = 20;
 const MAX_RETRIES = 10;
@@ -24,84 +26,66 @@ export class ChainIndexer {
     private provider: RPCProvider;
     private db: Pool;
     private chainConfig: ChainConfig;
-    private isRunning: boolean = false;
-    private shouldStop: boolean = false;
-    private lastProcessedBlock: number = 0;
-    // private eventHandlers: Map<string, ethers.Contract>; // Removed
+    private chainId: string;
+    private running: boolean = false;
+    private stopRequested: boolean = false;
+    private lastProcessedBlock: number | null = null;
+    private _batchSize: number;
 
-    constructor(chainConfig: ChainConfig, provider: RPCProvider, db: Pool) {
-        this.chainConfig = chainConfig;
+    constructor(chainId: string, provider: RPCProvider, db: Pool, chainConfig: ChainConfig) {
+        this.chainId = chainId;
         this.provider = provider;
         this.db = db;
-        this.lastProcessedBlock = chainConfig.startBlock;
-        // this.eventHandlers = new Map(); // Removed
-        // this.initializeEventHandlers(); // Removed
+        this.chainConfig = chainConfig;
+        // Use chain-specific batch size if defined, otherwise use global config
+        this._batchSize = chainConfig.batchSize || indexerConfig.batchSize;
     }
 
-    // private async initializeEventHandlers() { // Removed
-    //     const provider = await this.provider.getProvider();
-        
-    //     // Initialize contracts with minimal ABI (just the events we need)
-    //     const xenContract = new ethers.Contract(
-    //         this.chainConfig.contracts.xen,
-    //         ['event Transfer(address indexed from, address indexed to, uint256 value)'],
-    //         provider
-    //     );
-
-    //     const burnContract = new ethers.Contract(
-    //         this.chainConfig.contracts.xburnMinter,
-    //         ['event XENBurned(address indexed user, uint256 amount)'],
-    //         provider
-    //     );
-
-    //     const nftContract = new ethers.Contract(
-    //         this.chainConfig.contracts.xburnNft,
-    //         ['event BurnLockCreated(address indexed user, uint256 indexed tokenId, uint256 amount, uint256 lockDuration)'],
-    //         provider
-    //     );
-
-    //     this.eventHandlers.set('xen', xenContract);
-    //     this.eventHandlers.set('burn', burnContract);
-    //     this.eventHandlers.set('nft', nftContract);
-    // }
-
     async start() {
-        if (this.isRunning) {
-            logger.warn(`Indexer for chain ${this.chainConfig.name} already running`);
+        if (this.running) {
+            logger.warn(`Indexer already running for chain ${this.chainId}`, {
+                chainName: this.chainConfig.name
+            });
             return;
         }
 
-        this.isRunning = true;
-        this.shouldStop = false;
+        this.running = true;
+        this.stopRequested = false;
 
         try {
-            // Get last indexed block from database
-            const { rows: [chainData] } = await this.db.query(
+            // Get the last indexed block from the database
+            const { rows } = await this.db.query(
                 'SELECT last_indexed_block FROM chains WHERE chain_id = $1',
-                [this.chainConfig.id.toString()]
+                [this.chainId]
             );
 
-            if (chainData?.last_indexed_block) {
-                // Go back REORG_DEPTH blocks to handle chain reorganizations
-                this.lastProcessedBlock = Math.max(
-                    chainData.last_indexed_block - REORG_DEPTH,
-                    this.chainConfig.startBlock
-                );
+            let startBlock = this.chainConfig.startBlock;
+            if (rows.length > 0 && rows[0].last_indexed_block) {
+                // If we have processed blocks before, start from the last processed block
+                // minus REORG_DEPTH to handle potential chain reorganizations
+                startBlock = Math.max(this.chainConfig.startBlock, rows[0].last_indexed_block - REORG_DEPTH);
             }
 
-            logger.info(`Starting indexer for ${this.chainConfig.name} from block ${this.lastProcessedBlock}`);
-            await this.startIndexing();
+            logger.info(`Starting indexer for ${this.chainConfig.name} from block ${startBlock}`, {
+                chainName: this.chainConfig.name
+            });
+
+            this.lastProcessedBlock = startBlock;
+            this.indexLoop();
         } catch (error) {
-            logger.error(`Error starting indexer for ${this.chainConfig.name}:`, error);
-            this.isRunning = false;
+            logger.error(`Error starting indexer for chain ${this.chainId}:`, {
+                chainName: this.chainConfig.name,
+                error: error instanceof Error ? error : new Error(String(error))
+            });
+            this.running = false;
         }
     }
 
     async stop() {
         logger.info(`Stopping indexer for ${this.chainConfig.name}`);
-        this.shouldStop = true;
+        this.stopRequested = true;
         // Wait for current operations to complete
-        while (this.isRunning) {
+        while (this.running) {
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }
@@ -141,43 +125,53 @@ export class ChainIndexer {
         }
     }
 
-    private async startIndexing() {
-        this.isRunning = true;
-        
-        while (!this.shouldStop) {
-            try {
-                const provider = await this.provider.getProvider();
-                const latestBlock = await provider.getBlockNumber();
-                
-                if (this.lastProcessedBlock >= latestBlock) {
-                    // Wait for new blocks - use indexerConfig.pollingInterval
-                    logger.debug(`Chain ${this.chainConfig.name} caught up to latest block ${latestBlock}. Waiting ${indexerConfig.pollingInterval}ms.`);
-                    await new Promise(resolve => setTimeout(resolve, indexerConfig.pollingInterval));
-                    continue;
-                }
-
-                // Use global batch size from indexerConfig
-                const batchSize = indexerConfig.batchSize;
-                const startBlockNum = this.lastProcessedBlock + 1;
-                const endBlockNum = Math.min(startBlockNum + batchSize - 1, latestBlock);
-                
-                logger.info(`Processing batch for ${this.chainConfig.name}: ${startBlockNum} to ${endBlockNum} (latest: ${latestBlock})`);
-                await this.processBatch(startBlockNum, endBlockNum);
-                
-                // Update last processed block
-                this.lastProcessedBlock = endBlockNum;
-
-                // Update chain status
-                await this.updateChainStatus(this.lastProcessedBlock);
-
-            } catch (error) {
-                logger.error(`Error in indexing loop for ${this.chainConfig.name}:`, error);
-                // Wait before retrying
-                await new Promise(resolve => setTimeout(resolve, 10000));
-            }
+    private async indexLoop() {
+        if (!this.running || this.stopRequested) {
+            this.running = false;
+            return;
         }
 
-        this.isRunning = false;
+        try {
+            const provider = await this.provider.getProvider();
+            const latestBlock = await provider.getBlockNumber();
+            
+            if (this.lastProcessedBlock === null) {
+                throw new Error(`Last processed block is null for chain ${this.chainId}`);
+            }
+
+            // Only proceed if there are new blocks to process
+            if (latestBlock > this.lastProcessedBlock) {
+                // Calculate end block for this batch
+                const endBlock = Math.min(
+                    this.lastProcessedBlock + this.batchSize, // Use the chain-specific batch size
+                    latestBlock
+                );
+
+                logger.info(`Processing batch for ${this.chainConfig.name}: ${this.lastProcessedBlock + 1} to ${endBlock} (latest: ${latestBlock})`, {
+                    chainName: this.chainConfig.name
+                });
+
+                await this.processBatch(this.lastProcessedBlock + 1, endBlock);
+                this.lastProcessedBlock = endBlock;
+
+                // Update the last indexed block in the database
+                await this.db.query(
+                    'UPDATE chains SET last_indexed_block = $1, updated_at = NOW() WHERE chain_id = $2',
+                    [endBlock, this.chainId]
+                );
+            }
+
+            // Schedule the next iteration
+            setTimeout(() => this.indexLoop(), indexerConfig.pollingInterval);
+        } catch (error) {
+            logger.error(`Error in indexing loop for ${this.chainConfig.name}: ${error}`, {
+                chainName: this.chainConfig.name,
+                error: error instanceof Error ? error : new Error(String(error))
+            });
+
+            // On error, wait and retry
+            setTimeout(() => this.indexLoop(), indexerConfig.pollingInterval);
+        }
     }
 
     private async getTransferEvents(startBlock: number, endBlock: number): Promise<ProcessedEvent[]> {
@@ -265,7 +259,7 @@ export class ChainIndexer {
     private async updateChainStatus(lastBlock: number) {
         await this.db.query(
             'UPDATE chains SET last_indexed_block = $1, updated_at = NOW() WHERE chain_id = $2',
-            [lastBlock, this.chainConfig.id.toString()]
+            [lastBlock, this.chainId]
         );
     }
 
@@ -276,5 +270,38 @@ export class ChainIndexer {
         } catch (error) {
             logger.error(`Error updating chain stats for ${this.chainConfig.name}:`, error);
         }
+    }
+
+    // Add a batch size getter to be used in indexLoop
+    get batchSize() {
+        return this._batchSize;
+    }
+}
+
+// Add a function to execute the schema.sql file on startup
+export async function ensureSchemaIsApplied(db: Pool): Promise<void> {
+    try {
+        const schemaPath = path.resolve(__dirname, '../../schema.sql');
+        
+        if (!fs.existsSync(schemaPath)) {
+            throw new Error(`Schema file not found at ${schemaPath}`);
+        }
+        
+        const schema = fs.readFileSync(schemaPath, 'utf8');
+        
+        // Execute the schema SQL directly
+        await db.query(schema);
+        
+        logger.info('Schema applied successfully', {
+            chainName: 'System'
+        });
+    } catch (error) {
+        logger.error('Error applying schema:', {
+            chainName: 'System',
+            error: error instanceof Error ? error : new Error(String(error))
+        });
+        
+        // Re-throw the error to be handled by the caller
+        throw error;
     }
 } 
