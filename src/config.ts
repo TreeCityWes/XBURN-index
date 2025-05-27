@@ -25,15 +25,18 @@ const getRpcUrls = (chainName: string, defaultUrls: string[]) => {
   // Check for chain-specific RPC URL
   const envRpcUrl = process.env[`${chainName.toUpperCase()}_RPC_URL`];
   if (envRpcUrl) {
-    return [envRpcUrl, ...defaultUrls];
+    return [envRpcUrl, ...defaultUrls.filter(url => !url.includes(ALCHEMY_API_KEY) || ALCHEMY_API_KEY)]; // Keep Alchemy if key is present
   }
 
   // Check for chain-specific RPC URLs list
   const envRpcUrls = process.env[`${chainName.toUpperCase()}_RPC_URLS`];
   if (envRpcUrls) {
-    return [...envRpcUrls.split(','), ...defaultUrls];
+    return [...envRpcUrls.split(','), ...defaultUrls.filter(url => !url.includes(ALCHEMY_API_KEY) || ALCHEMY_API_KEY)]; // Keep Alchemy if key is present
   }
-
+  // If ALCHEMY_API_KEY is not set, filter out Alchemy URLs
+  if (!ALCHEMY_API_KEY) {
+    return defaultUrls.filter(url => !url.includes('alchemy.com'));
+  }
   return defaultUrls;
 };
 
@@ -47,7 +50,7 @@ export const chains: { [key: string]: ChainConfig } = {
       'https://base.gateway.tenderly.co',
       'https://base-rpc.publicnode.com',
       'https://mainnet.base.org',
-      'https://base.llamarpc.com',
+      // 'https://base.llamarpc.com', // ENOTFOUND
       'https://base.blockpi.network/v1/rpc/public'
     ]),
     contracts: {
@@ -66,9 +69,9 @@ export const chains: { [key: string]: ChainConfig } = {
       `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://ethereum.publicnode.com',
       'https://ethereum.blockpi.network/v1/rpc/public',
-      'https://rpc.ankr.com/eth',
-      'https://eth.llamarpc.com',
-      'https://cloudflare-eth.com'
+      // 'https://rpc.ankr.com/eth', // Needs API key
+      // 'https://eth.llamarpc.com', // ENOTFOUND
+      // 'https://cloudflare-eth.com' // Connection issues
     ]),
     contracts: {
       xen: '0x06450dEe7FD2Fb8E39061434BAbCFC05599a6Fb8',
@@ -85,9 +88,9 @@ export const chains: { [key: string]: ChainConfig } = {
     rpcUrls: getRpcUrls('polygon', [
       `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://polygon-rpc.com',
-      'https://rpc.ankr.com/polygon',
+      // 'https://rpc.ankr.com/polygon', // Needs API key / 403 error
       'https://polygon-bor-rpc.publicnode.com',
-      'https://polygon.llamarpc.com',
+      // 'https://polygon.llamarpc.com', // ENOTFOUND
       'https://polygon.blockpi.network/v1/rpc/public'
     ]),
     contracts: {
@@ -109,10 +112,10 @@ export const chains: { [key: string]: ChainConfig } = {
       'https://optimism-mainnet.public.blastapi.io',
       'https://optimism-rpc.publicnode.com',
       'https://mainnet.optimism.io',
-      'https://1rpc.io/op',
+      // 'https://1rpc.io/op', // Intermittent issues
       'https://optimism.blockpi.network/v1/rpc/public',
-      'https://rpc.ankr.com/optimism',
-      'https://optimism.llamarpc.com'
+      // 'https://rpc.ankr.com/optimism', // Needs API key
+      // 'https://optimism.llamarpc.com' // ENOTFOUND
     ]),
     contracts: {
       xen: '0xeB585163DEbB1E637c6D617de3bEF99347cd75c8',
@@ -130,8 +133,8 @@ export const chains: { [key: string]: ChainConfig } = {
       'https://pulsechain-rpc.publicnode.com',
       'https://rpc.pulsechain.com',
       'https://rpc-pulsechain.g4mm4.io',
-      'https://rpc.owlracle.info/pulse/70d38ce1826c4a60bb2a8e05a6c8b20f',
-      'https://evex.cloud/pulserpc'
+      // 'https://rpc.owlracle.info/pulse/70d38ce1826c4a60bb2a8e05a6c8b20f', // 401 Unauthorized
+      // 'https://evex.cloud/pulserpc' // ENOTFOUND
     ]),
     contracts: {
       xen: '0x8a7FDcA264e87b6da72D000f22186B4403081A2a',
@@ -146,12 +149,12 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 56,
     name: 'BSC',
     rpcUrls: getRpcUrls('bsc', [
-      'https://bsc-dataseed.binance.org',
+      'https://bsc-dataseed.binance.org', // Official, often rate-limited
       'https://bsc-dataseed1.binance.org',
       'https://bsc-dataseed2.binance.org',
       'https://bsc-dataseed3.binance.org',
       'https://bsc-dataseed4.binance.org',
-      'https://rpc.ankr.com/bsc',
+      // 'https://rpc.ankr.com/bsc', // Needs API key
       'https://bsc.publicnode.com'
     ]),
     contracts: {
@@ -160,21 +163,22 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnNft: '0xf0ca18f2462936df8332f88c4cf27a03d829dbb2'
     },
     startBlock: 50300000,
-    gasPrice: '0.1',
+    gasPrice: '0.1', // BSC gas price is typically 3-5 Gwei, 0.1 might be too low. Defaulting to allow network to choose.
     batchSize: 100
   },
   avalanche: {
     id: 43114,
     name: 'Avalanche',
     rpcUrls: getRpcUrls('avalanche', [
-      `https://avalanche-mainnet.infura.io/v3/${ALCHEMY_API_KEY}`,
+      // `https://avalanche-mainnet.infura.io/v3/${ALCHEMY_API_KEY}`, // ALCHEMY_API_KEY might not be for Infura or this specific chain
+      `https://avalanche-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`, // Assuming Alchemy key works for Avalanche
       'https://avalanche.drpc.org',
       'https://avalanche-c-chain-rpc.publicnode.com',
       'https://ava-mainnet.public.blastapi.io/ext/bc/C/rpc',
       'https://api.avax.network/ext/bc/C/rpc',
-      'https://1rpc.io/avax/c',
-      'https://avax.meowrpc.com',
-      'https://rpc.ankr.com/avalanche',
+      // 'https://1rpc.io/avax/c', // Connection issues
+      // 'https://avax.meowrpc.com', // Bad Request
+      // 'https://rpc.ankr.com/avalanche', // Needs API key
       'https://avalanche.blockpi.network/v1/rpc/public',
       'https://avax-pokt.nodies.app/ext/bc/C/rpc'
     ]),
