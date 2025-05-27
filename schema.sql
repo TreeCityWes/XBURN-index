@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS xen_burns (
     block_number BIGINT NOT NULL,
     from_address VARCHAR(42) NOT NULL,
     amount NUMERIC NOT NULL,
+    timestamp TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -32,6 +33,50 @@ CREATE TABLE IF NOT EXISTS burn_nft_positions (
     token_id NUMERIC NOT NULL,
     amount NUMERIC NOT NULL,
     lock_duration NUMERIC NOT NULL,
+    timestamp TIMESTAMP,
+    maturity_date TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create tables for Swap and Burn events
+CREATE TABLE IF NOT EXISTS swap_burns (
+    id SERIAL PRIMARY KEY,
+    chain_id VARCHAR(10) NOT NULL REFERENCES chains(chain_id),
+    tx_hash VARCHAR(66) NOT NULL,
+    block_number BIGINT NOT NULL,
+    user_address VARCHAR(42) NOT NULL,
+    token_address VARCHAR(42) NOT NULL,
+    token_amount NUMERIC NOT NULL,
+    xen_amount NUMERIC NOT NULL,
+    timestamp TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create table for Liquidity Added events
+CREATE TABLE IF NOT EXISTS liquidity_added (
+    id SERIAL PRIMARY KEY,
+    chain_id VARCHAR(10) NOT NULL REFERENCES chains(chain_id),
+    tx_hash VARCHAR(66) NOT NULL,
+    block_number BIGINT NOT NULL,
+    user_address VARCHAR(42) NOT NULL,
+    token_address VARCHAR(42) NOT NULL,
+    token_amount NUMERIC NOT NULL,
+    xen_amount NUMERIC NOT NULL,
+    timestamp TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create table to track NFT claims
+CREATE TABLE IF NOT EXISTS nft_claims (
+    id SERIAL PRIMARY KEY,
+    chain_id VARCHAR(10) NOT NULL REFERENCES chains(chain_id),
+    tx_hash VARCHAR(66) NOT NULL,
+    block_number BIGINT NOT NULL,
+    user_address VARCHAR(42) NOT NULL,
+    token_id NUMERIC NOT NULL,
+    base_amount NUMERIC NOT NULL,
+    bonus_amount NUMERIC NOT NULL,
+    timestamp TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -74,6 +119,21 @@ CREATE TABLE IF NOT EXISTS chain_stats (
     UNIQUE(chain_id)
 );
 
+-- Create NFT statistics table
+CREATE TABLE IF NOT EXISTS nft_stats (
+    id SERIAL PRIMARY KEY,
+    chain_id VARCHAR(10) NOT NULL REFERENCES chains(chain_id),
+    total_nfts BIGINT NOT NULL DEFAULT 0,
+    active_nfts BIGINT NOT NULL DEFAULT 0,
+    claimed_nfts BIGINT NOT NULL DEFAULT 0,
+    avg_lock_duration NUMERIC NOT NULL DEFAULT 0,
+    min_lock_duration NUMERIC NOT NULL DEFAULT 0,
+    max_lock_duration NUMERIC NOT NULL DEFAULT 0,
+    total_locked_xen NUMERIC NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(chain_id)
+);
+
 -- Create chain health status table
 CREATE TABLE IF NOT EXISTS chain_health (
     id SERIAL PRIMARY KEY,
@@ -101,21 +161,55 @@ CREATE TABLE IF NOT EXISTS indexing_history (
     indexed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create user stats table for quick access to aggregated data
+CREATE TABLE IF NOT EXISTS user_stats (
+    id SERIAL PRIMARY KEY,
+    chain_id VARCHAR(10) NOT NULL REFERENCES chains(chain_id),
+    user_address VARCHAR(42) NOT NULL,
+    total_xen_burned NUMERIC NOT NULL DEFAULT 0,
+    total_xburn_minted NUMERIC NOT NULL DEFAULT 0,
+    total_xburn_burned NUMERIC NOT NULL DEFAULT 0,
+    active_positions INTEGER NOT NULL DEFAULT 0,
+    total_positions INTEGER NOT NULL DEFAULT 0,
+    last_activity_time TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(chain_id, user_address)
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_xen_burns_chain_id ON xen_burns(chain_id);
 CREATE INDEX IF NOT EXISTS idx_xen_burns_from_address ON xen_burns(from_address);
 CREATE INDEX IF NOT EXISTS idx_xen_burns_block_number ON xen_burns(block_number);
 CREATE INDEX IF NOT EXISTS idx_xen_burns_created_at ON xen_burns(created_at);
+CREATE INDEX IF NOT EXISTS idx_xen_burns_timestamp ON xen_burns(timestamp);
 
 CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_chain_id ON burn_nft_positions(chain_id);
 CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_user_address ON burn_nft_positions(user_address);
 CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_token_id ON burn_nft_positions(token_id);
 CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_block_number ON burn_nft_positions(block_number);
 CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_created_at ON burn_nft_positions(created_at);
+CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_timestamp ON burn_nft_positions(timestamp);
+CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_maturity_date ON burn_nft_positions(maturity_date);
+
+CREATE INDEX IF NOT EXISTS idx_swap_burns_chain_id ON swap_burns(chain_id);
+CREATE INDEX IF NOT EXISTS idx_swap_burns_user_address ON swap_burns(user_address);
+CREATE INDEX IF NOT EXISTS idx_swap_burns_timestamp ON swap_burns(timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_liquidity_added_chain_id ON liquidity_added(chain_id);
+CREATE INDEX IF NOT EXISTS idx_liquidity_added_user_address ON liquidity_added(user_address);
+CREATE INDEX IF NOT EXISTS idx_liquidity_added_timestamp ON liquidity_added(timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_nft_claims_chain_id ON nft_claims(chain_id);
+CREATE INDEX IF NOT EXISTS idx_nft_claims_user_address ON nft_claims(user_address);
+CREATE INDEX IF NOT EXISTS idx_nft_claims_token_id ON nft_claims(token_id);
+CREATE INDEX IF NOT EXISTS idx_nft_claims_timestamp ON nft_claims(timestamp);
 
 -- Create indexes for new tables
 CREATE INDEX IF NOT EXISTS idx_token_prices_chain_timestamp ON token_prices(chain_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_chain_stats_updated_at ON chain_stats(updated_at);
+CREATE INDEX IF NOT EXISTS idx_nft_stats_chain_id ON nft_stats(chain_id);
+CREATE INDEX IF NOT EXISTS idx_user_stats_chain_user ON user_stats(chain_id, user_address);
+CREATE INDEX IF NOT EXISTS idx_user_stats_last_activity ON user_stats(last_activity_time);
 
 -- Create function to update chain stats
 CREATE OR REPLACE FUNCTION update_chain_stats(chain_id_param VARCHAR(10))
@@ -134,13 +228,13 @@ BEGIN
         chain_id_param,
         COALESCE(SUM(amount), 0) as total_burns,
         COUNT(DISTINCT token_id) as total_positions,
-        COUNT(DISTINCT CASE WHEN (created_at + (lock_duration * interval '1 day')) > NOW() THEN token_id END) as active_positions,
+        COUNT(DISTINCT CASE WHEN (maturity_date > NOW()) THEN token_id END) as active_positions,
         COUNT(DISTINCT user_address) as unique_burners,
         COALESCE((
             SELECT SUM(amount)
             FROM xen_burns
             WHERE chain_id = chain_id_param
-            AND created_at >= NOW() - interval '24 hours'
+            AND timestamp >= NOW() - interval '24 hours'
         ), 0) as last_24h_burns,
         COALESCE(AVG(lock_duration), 0) as avg_lock_period
     FROM burn_nft_positions
@@ -154,6 +248,119 @@ BEGIN
         last_24h_burns = EXCLUDED.last_24h_burns,
         avg_lock_period = EXCLUDED.avg_lock_period,
         updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create function to update NFT stats
+CREATE OR REPLACE FUNCTION update_nft_stats(chain_id_param VARCHAR(10))
+RETURNS void AS $$
+BEGIN
+    INSERT INTO nft_stats (
+        chain_id,
+        total_nfts,
+        active_nfts,
+        claimed_nfts,
+        avg_lock_duration,
+        min_lock_duration,
+        max_lock_duration,
+        total_locked_xen,
+        updated_at
+    )
+    SELECT 
+        chain_id_param,
+        COUNT(DISTINCT token_id) as total_nfts,
+        COUNT(DISTINCT CASE WHEN (maturity_date > NOW()) THEN token_id END) as active_nfts,
+        (
+            SELECT COUNT(DISTINCT token_id)
+            FROM nft_claims
+            WHERE chain_id = chain_id_param
+        ) as claimed_nfts,
+        COALESCE(AVG(lock_duration), 0) as avg_lock_duration,
+        COALESCE(MIN(lock_duration), 0) as min_lock_duration,
+        COALESCE(MAX(lock_duration), 0) as max_lock_duration,
+        COALESCE(SUM(amount), 0) as total_locked_xen,
+        NOW() as updated_at
+    FROM burn_nft_positions
+    WHERE chain_id = chain_id_param
+    ON CONFLICT (chain_id)
+    DO UPDATE SET
+        total_nfts = EXCLUDED.total_nfts,
+        active_nfts = EXCLUDED.active_nfts,
+        claimed_nfts = EXCLUDED.claimed_nfts,
+        avg_lock_duration = EXCLUDED.avg_lock_duration,
+        min_lock_duration = EXCLUDED.min_lock_duration,
+        max_lock_duration = EXCLUDED.max_lock_duration,
+        total_locked_xen = EXCLUDED.total_locked_xen,
+        updated_at = EXCLUDED.updated_at;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create function to update user stats
+CREATE OR REPLACE FUNCTION update_user_stats(chain_id_param VARCHAR(10), user_address_param VARCHAR(42))
+RETURNS void AS $$
+BEGIN
+    INSERT INTO user_stats (
+        chain_id,
+        user_address,
+        total_xen_burned,
+        total_xburn_minted,
+        total_xburn_burned,
+        active_positions,
+        total_positions,
+        last_activity_time,
+        updated_at
+    )
+    SELECT 
+        chain_id_param,
+        user_address_param,
+        COALESCE((
+            SELECT SUM(amount)
+            FROM xen_burns
+            WHERE chain_id = chain_id_param
+            AND from_address = user_address_param
+        ), 0) as total_xen_burned,
+        COALESCE((
+            SELECT SUM(base_amount + bonus_amount)
+            FROM nft_claims
+            WHERE chain_id = chain_id_param
+            AND user_address = user_address_param
+        ), 0) as total_xburn_minted,
+        0 as total_xburn_burned, -- To be updated with actual data
+        COUNT(DISTINCT CASE WHEN (maturity_date > NOW()) THEN token_id END) as active_positions,
+        COUNT(DISTINCT token_id) as total_positions,
+        GREATEST(
+            COALESCE((
+                SELECT MAX(timestamp)
+                FROM xen_burns
+                WHERE chain_id = chain_id_param
+                AND from_address = user_address_param
+            ), '1970-01-01'::timestamp),
+            COALESCE((
+                SELECT MAX(timestamp)
+                FROM burn_nft_positions
+                WHERE chain_id = chain_id_param
+                AND user_address = user_address_param
+            ), '1970-01-01'::timestamp),
+            COALESCE((
+                SELECT MAX(timestamp)
+                FROM nft_claims
+                WHERE chain_id = chain_id_param
+                AND user_address = user_address_param
+            ), '1970-01-01'::timestamp)
+        ) as last_activity_time,
+        NOW() as updated_at
+    FROM burn_nft_positions
+    WHERE chain_id = chain_id_param
+    AND user_address = user_address_param
+    GROUP BY chain_id, user_address
+    ON CONFLICT (chain_id, user_address)
+    DO UPDATE SET
+        total_xen_burned = EXCLUDED.total_xen_burned,
+        total_xburn_minted = EXCLUDED.total_xburn_minted,
+        active_positions = EXCLUDED.active_positions,
+        total_positions = EXCLUDED.total_positions,
+        last_activity_time = EXCLUDED.last_activity_time,
+        updated_at = EXCLUDED.updated_at;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -294,7 +501,7 @@ BEGIN
             SELECT SUM(amount)
             FROM xen_burns
             WHERE chain_id = chain_id_param
-            AND created_at >= NOW() - interval '24 hours'
+            AND timestamp >= NOW() - interval '24 hours'
         ), 0) as burn_rate_24h,
         COALESCE(AVG(amount), 0) as avg_burn_amount,
         COALESCE(MAX(amount), 0) as max_burn_amount,
@@ -311,6 +518,47 @@ BEGIN
         max_burn_amount = EXCLUDED.max_burn_amount,
         min_burn_amount = EXCLUDED.min_burn_amount,
         updated_at = EXCLUDED.updated_at;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to get user token statistics
+CREATE OR REPLACE FUNCTION get_user_token_stats(p_chain_id VARCHAR(10), p_user_address VARCHAR(42))
+RETURNS TABLE (
+    chain_id VARCHAR(10),
+    user_address VARCHAR(42),
+    total_xen_burned NUMERIC,
+    total_nfts BIGINT,
+    active_nfts BIGINT,
+    claimed_nfts BIGINT,
+    total_xburn_minted NUMERIC,
+    avg_lock_duration NUMERIC,
+    last_activity_time TIMESTAMP
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        us.chain_id,
+        us.user_address,
+        us.total_xen_burned,
+        us.total_positions as total_nfts,
+        us.active_positions as active_nfts,
+        (
+            SELECT COUNT(*)
+            FROM nft_claims nc
+            WHERE nc.chain_id = p_chain_id
+            AND nc.user_address = p_user_address
+        ) as claimed_nfts,
+        us.total_xburn_minted,
+        COALESCE((
+            SELECT AVG(lock_duration)
+            FROM burn_nft_positions bnp
+            WHERE bnp.chain_id = p_chain_id
+            AND bnp.user_address = p_user_address
+        ), 0) as avg_lock_duration,
+        us.last_activity_time
+    FROM user_stats us
+    WHERE us.chain_id = p_chain_id
+    AND us.user_address = p_user_address;
 END;
 $$ LANGUAGE plpgsql;
 
