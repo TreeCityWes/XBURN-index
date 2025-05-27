@@ -1,17 +1,14 @@
 #!/bin/bash
+set -e
+
+echo "Starting database initialization..."
 
 # Wait for PostgreSQL to be ready
-until PGPASSWORD=postgres psql -h postgres -U postgres -d postgres -c '\q'; do
-  echo "Postgres is unavailable - sleeping"
-  sleep 1
-done
+echo "Waiting for PostgreSQL to be ready..."
+sleep 5
 
-echo "Postgres is up - executing schema"
+# Initialize databases for each chain
+echo "Running database initialization..."
+npm run init-db
 
-# Create database if it doesn't exist
-PGPASSWORD=postgres psql -h postgres -U postgres -d postgres -c "CREATE DATABASE xen_burn_analytics;" || true
-
-# Apply schema
-PGPASSWORD=postgres psql -h postgres -U postgres -d xen_burn_analytics -f /app/schema.sql
-
-echo "Schema applied successfully" 
+echo "Database initialization complete." 

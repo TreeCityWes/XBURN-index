@@ -6,7 +6,6 @@ services:
   postgres:
     image: postgres:14
     environment:
-      POSTGRES_DB: xen_burn_analytics
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -31,6 +30,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_SSL=false
 
   metabase:
     image: metabase/metabase
@@ -42,6 +47,15 @@ services:
     networks:
       - xburn_network
     restart: unless-stopped
+    volumes:
+      - metabase_data:/metabase-data
+    environment:
+      - MB_DB_TYPE=postgres
+      - MB_DB_DBNAME=metabase
+      - MB_DB_PORT=5432
+      - MB_DB_USER=postgres
+      - MB_DB_PASS=postgres
+      - MB_DB_HOST=postgres
 
   indexer:
     build: .
@@ -49,7 +63,6 @@ services:
       # Database configuration
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=xen_burn_analytics
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_SSL=false
@@ -77,6 +90,8 @@ services:
       - .:/app
       - /app/node_modules
     command: npm run dev
+    restart: unless-stopped
 
 volumes:
-  postgres_data: 
+  postgres_data:
+  metabase_data: 

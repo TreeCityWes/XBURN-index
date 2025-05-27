@@ -2,18 +2,24 @@ import { ethers } from 'ethers';
 import { Pool } from 'pg';
 import { chainLogger } from '../utils/logger';
 import { RPCProvider } from '../provider';
-import { ChainConfig as AppChainConfig } from '../config';
+import { ChainConfig as AppChainConfig, chains } from '../config';
+
+// Add Node.js types declaration
+declare global {
+    var setInterval: (callback: (...args: any[]) => void, ms: number) => NodeJS.Timeout;
+    var clearInterval: (intervalId: NodeJS.Timeout) => void;
+}
 
 export class IndexerHealthMonitor {
-    private db: Pool;
+    private dbs: Map<string, Pool>;
     private rpcProviders: Map<string, RPCProvider>;
     private appChains: AppChainConfig[];
     private checkInterval: NodeJS.Timeout | null = null;
 
-    constructor(db: Pool, rpcProviders: Map<string, RPCProvider>) {
-        this.db = db;
+    constructor(dbs: Map<string, Pool>, rpcProviders: Map<string, RPCProvider>) {
+        this.dbs = dbs;
         this.rpcProviders = rpcProviders;
-        this.appChains = Object.values(require('../config').chains);
+        this.appChains = Object.values(chains);
     }
 
     async start(intervalMs: number = 60000) {
@@ -63,7 +69,7 @@ export class IndexerHealthMonitor {
             const rpcLatencyMs = Date.now() - startTime;
 
             // Get last indexed block from database
-            const { rows: [chainData] } = await this.db.query(
+            const { rows: [chainData] } = await this.dbs.get(chainId)?.query(
                 'SELECT last_indexed_block FROM chains WHERE chain_id = $1',
                 [chainId]
             );
@@ -72,7 +78,7 @@ export class IndexerHealthMonitor {
             const blocksBehind = latestBlock - lastIndexedBlock;
 
             // Update chain health status - match SQL function parameter names
-            await this.db.query(
+            await this.dbs.get(chainId)?.query(
                 'SELECT update_chain_health($1, $2, $3, $4, $5, $6)',
                 [
                     chainId,               // p_chain_id
@@ -95,7 +101,7 @@ export class IndexerHealthMonitor {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             
             // Update chain health with error - match SQL function parameter names
-            await this.db.query(
+            await this.dbs.get(chainId)?.query(
                 'SELECT update_chain_health($1, $2, $3, $4, $5, $6)',
                 [
                     chainId,               // p_chain_id
@@ -124,7 +130,7 @@ export class IndexerHealthMonitor {
         durationMs: number
     ) {
         try {
-            await this.db.query(
+            await this.dbs.get(chainId)?.query(
                 'SELECT log_indexing_performance($1, $2, $3, $4, $5, $6)',
                 [chainId, startBlock, endBlock, burnsIndexed, positionsIndexed, durationMs]
             );
@@ -138,7 +144,7 @@ export class IndexerHealthMonitor {
 
     async getChainHealthSummary() {
         try {
-            const { rows } = await this.db.query('SELECT * FROM chain_health ORDER BY chain_id');
+            const { rows } = await this.dbs.get('System')?.query('SELECT * FROM chain_health ORDER BY chain_id');
             return rows;
         } catch (error) {
             chainLogger.error('Error getting chain health summary', {

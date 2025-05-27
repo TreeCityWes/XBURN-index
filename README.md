@@ -1,134 +1,113 @@
-# XBURN Analytics Dashboard
+# XBurn Analytics Dashboard Backend
 
-Multi-chain indexer and analytics dashboard for tracking XEN burns and XBURN NFT positions across multiple chains.
-
-## Supported Chains
-
-- Base (Chain ID: 8453)
-- Ethereum (Chain ID: 1)
-- Polygon (Chain ID: 137)
-- Optimism (Chain ID: 10)
-- PulseChain (Chain ID: 369)
-- BSC (Chain ID: 56)
-- Avalanche (Chain ID: 43114)
+This is the backend service for the XBurn Analytics Dashboard, which tracks XEN token burns and related events across multiple blockchains.
 
 ## Features
 
-- Real-time indexing of XEN burns and XBURN NFT positions
-- Multi-chain support with automatic failover between RPC providers
-- Chain-specific statistics and analytics
-- Metabase dashboard for visualizing burn data
-- Health monitoring and automatic recovery
-- PostgreSQL database for reliable data storage
+- Multi-chain indexing of XEN burn events, NFT positions, swap burns, and liquidity events
+- Chain-specific database tables for efficient querying
+- Automatically compiles statistics per chain and per user
+- Health monitoring for chain indexers
+- RPC provider failover and load balancing
+- API endpoints for accessing burn data
 
-## Prerequisites
+## Requirements
 
 - Docker and Docker Compose
-- Node.js 18+ (for development)
-- PostgreSQL 14+ (handled by Docker)
+- Node.js 18+
+- PostgreSQL 14+
 
 ## Quick Start
 
-1. Clone the repository:
+1. Clone the repository
+2. Create a `.env` file with your RPC URLs (optional, default RPCs are provided)
+3. Run the rebuild script:
+
 ```bash
-git clone https://github.com/yourusername/xburn-dashboard.git
-cd xburn-dashboard/backend
+chmod +x rebuild.sh
+./rebuild.sh
 ```
 
-2. Create `.env` file:
-```bash
+This will start the following services:
+- PostgreSQL database
+- Database initialization service
+- Metabase analytics dashboard
+- Indexer service
+
+## Database Structure
+
+Each chain has its own set of tables:
+- `chain_[CHAIN_ID]_xen_burns` - XEN token burn events
+- `chain_[CHAIN_ID]_burn_nft_positions` - NFT burn lock positions
+- `chain_[CHAIN_ID]_swap_burns` - Swap and burn events
+- `chain_[CHAIN_ID]_liquidity_added` - Liquidity addition events
+- `chain_[CHAIN_ID]_chain_stats` - Chain-level statistics
+- `chain_[CHAIN_ID]_user_stats` - User-level statistics
+
+## Available Scripts
+
+- `npm run dev` - Start the indexer in development mode
+- `npm run build` - Build the TypeScript code
+- `npm run start` - Start the built indexer
+- `npm run init-db` - Initialize the database schema
+- `npm run show-stats` - Display current chain statistics
+
+## Monitoring
+
+- Indexer health: http://localhost:3000/api/health/chains
+- Metabase dashboard: http://localhost:3001
+
+## Configuration
+
+You can configure the indexer by setting environment variables in the `.env` file or in the `docker-compose.yml` file:
+
+```
+# Chain selection
+ENABLED_CHAINS=base,ethereum,polygon,optimism,pulsechain,bsc,avalanche
+
 # Database configuration
 DB_HOST=postgres
 DB_PORT=5432
-DB_NAME=xen_burn_analytics
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_SSL=false
 
-# Chain RPC URLs (using Ankr premium endpoints for better reliability)
-BASE_RPC_URL=https://mainnet.base.org
-ETH_RPC_URL=https://eth.llamarpc.com
-POLYGON_RPC_URL=https://polygon-rpc.com
-OPTIMISM_RPC_URL=https://mainnet.optimism.io
-BSC_RPC_URL=https://bsc-dataseed1.binance.org
-AVALANCHE_RPC_URL=https://api.avax.network/ext/bc/C/rpc
-PULSECHAIN_RPC_URL=https://rpc.pulsechain.com
+# Indexer configuration
+INDEXER_INTERVAL_MS=15000
+BATCH_SIZE=250
+MAX_RETRIES=10
+RETRY_DELAY=5000
+MAX_BACKOFF_DELAY=60000
 
-# Enable specific chains (comma-separated, no spaces)
-ENABLED_CHAINS=base,ethereum,polygon,optimism,bsc,avalanche,pulsechain
+# Custom RPC URLs (optional)
+BASE_RPC_URL=https://your-base-rpc-url
+ETHEREUM_RPC_URL=https://your-ethereum-rpc-url
 ```
 
-3. Start the services:
-```bash
-docker-compose up -d
-```
+## Troubleshooting
 
-4. Access the dashboards:
-- Analytics Dashboard: http://localhost:3001
-- Health Status: http://localhost:3000/health/chains
+If you encounter issues with the indexer:
 
-## Development
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Build TypeScript:
-```bash
-npm run build
-```
-
-3. Run development server:
-```bash
-npm run dev
-```
-
-## Production Deployment
-
-1. Clone the repository on your VPS:
-```bash
-git clone https://github.com/yourusername/xburn-dashboard.git
-cd xburn-dashboard/backend
-```
-
-2. Create `.env` file with your production settings
-
-3. Start the services:
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-## Architecture
-
-- `src/provider.ts`: RPC provider management with failover support
-- `src/indexer/`: Chain indexing logic
-- `src/config.ts`: Chain-specific configurations
-- `schema.sql`: Database schema and functions
-- `docker-compose.yml`: Service orchestration
-
-## Database Schema
-
-- `chains`: Chain configuration and indexing progress
-- `xen_burns`: Records of token burns
-- `burn_nft_positions`: NFT position data
-- `chain_token_stats`: Per-chain token statistics
-- `chain_health`: Indexer health monitoring
-
-## Monitoring
-
-- Health checks: http://localhost:3000/health/chains
-- Logs: `docker-compose logs -f indexer`
-- Metabase dashboards: http://localhost:3001
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
+1. Check the logs: `docker-compose logs -f indexer`
+2. Verify database connectivity: `docker-compose logs -f postgres`
+3. Rebuild the database: `./rebuild.sh`
 
 ## License
 
 ISC
+
+## Windows Users
+
+If you're using Windows, run these commands instead:
+
+```powershell
+# Start the services
+docker-compose up -d
+
+# To rebuild from scratch
+docker-compose down
+docker volume rm xburn-dashboard_postgres_data
+docker-compose up -d
+```
+
+Make sure to edit the init.sh file to use LF line endings instead of CRLF.

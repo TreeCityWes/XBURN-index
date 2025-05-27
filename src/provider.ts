@@ -2,6 +2,12 @@ import { ethers } from 'ethers';
 import { indexerConfig } from './config';
 import { chainLogger } from './utils/logger';
 
+// Add NodeJS types declaration
+declare global {
+  var setInterval: (callback: (...args: any[]) => void, ms: number) => NodeJS.Timeout;
+  var clearInterval: (intervalId: NodeJS.Timeout) => void;
+}
+
 interface ProviderHealth {
   url: string;
   lastSuccess: number;
