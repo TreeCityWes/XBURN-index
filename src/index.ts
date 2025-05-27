@@ -78,21 +78,8 @@ class IndexerManager {
     }
 
     private async startHealthMonitoring() {
-        // Update provider map for health monitor
-        const providerMap = new Map();
-        for (const [chainId, provider] of this.providers.entries()) {
-            const chain = Object.values(chains).find(c => c.id.toString() === chainId);
-            if (chain) {
-                providerMap.set(chainId, {
-                    chainId,
-                    name: chain.name,
-                    rpcUrl: chain.rpcUrls[0],
-                    provider: await provider.getProvider()
-                });
-            }
-        }
-
-        this.healthMonitor = new IndexerHealthMonitor(this.db, providerMap);
+        // Pass the live RPCProvider map to the health monitor
+        this.healthMonitor = new IndexerHealthMonitor(this.db, this.providers);
         await this.healthMonitor.start();
         logger.info('Health monitoring started');
     }
@@ -124,24 +111,22 @@ class IndexerManager {
     }
 }
 
-// Handle process termination
-process.on('SIGTERM', async () => {
-    logger.info('Received SIGTERM signal');
-    const manager = new IndexerManager();
-    await manager.stop();
-    process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-    logger.info('Received SIGINT signal');
-    const manager = new IndexerManager();
-    await manager.stop();
-    process.exit(0);
-});
-
 // Start the indexer
 const manager = new IndexerManager();
+
+// Handle process termination
+async function gracefulShutdown(signal: string) {
+    logger.info(`Received ${signal} signal`);
+    if (manager) {
+        await manager.stop();
+    }
+    process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 manager.start().catch(error => {
-    logger.error('Fatal error:', error);
-    process.exit(1);
+    logger.error('Fatal error during indexer manager startup:', error);
+    gracefulShutdown('FATAL_ERROR').then(() => process.exit(1));
 }); 

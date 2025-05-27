@@ -78,13 +78,14 @@ CREATE TABLE IF NOT EXISTS chain_stats (
 CREATE TABLE IF NOT EXISTS chain_health (
     id SERIAL PRIMARY KEY,
     chain_id VARCHAR(10) NOT NULL REFERENCES chains(chain_id),
-    is_indexing BOOLEAN DEFAULT false,
+    is_healthy BOOLEAN DEFAULT false,
     last_successful_index TIMESTAMP,
-    last_error TEXT,
+    error_message TEXT,
     blocks_behind BIGINT,
     rpc_latency_ms INTEGER,
     status VARCHAR(20) DEFAULT 'unknown',
     checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    current_rpc_url TEXT,
     UNIQUE(chain_id)
 );
 
@@ -167,50 +168,41 @@ $$ LANGUAGE plpgsql;
 
 -- Function to update chain health status
 CREATE OR REPLACE FUNCTION update_chain_health(
-    p_chain_id VARCHAR(10),
-    p_is_indexing BOOLEAN,
-    p_last_error TEXT DEFAULT NULL,
-    p_blocks_behind BIGINT DEFAULT NULL,
-    p_rpc_latency_ms INTEGER DEFAULT NULL
+    p_chain_id VARCHAR,
+    p_is_healthy BOOLEAN,
+    p_error_message TEXT,
+    p_blocks_behind BIGINT,
+    p_rpc_latency_ms INTEGER,
+    p_current_rpc_url TEXT
 )
-RETURNS void AS $$
+RETURNS VOID AS $$
 BEGIN
     INSERT INTO chain_health (
-        chain_id,
-        is_indexing,
-        last_error,
-        blocks_behind,
+        chain_id, 
+        is_healthy, 
+        last_checked, 
+        error_message, 
+        blocks_behind, 
         rpc_latency_ms,
-        status,
-        checked_at
+        current_rpc_url
     )
     VALUES (
-        p_chain_id,
-        p_is_indexing,
-        p_last_error,
-        p_blocks_behind,
+        p_chain_id, 
+        p_is_healthy, 
+        NOW(), 
+        p_error_message, 
+        p_blocks_behind, 
         p_rpc_latency_ms,
-        CASE 
-            WHEN p_last_error IS NOT NULL THEN 'error'
-            WHEN p_blocks_behind > 1000 THEN 'behind'
-            WHEN p_is_indexing THEN 'indexing'
-            ELSE 'healthy'
-        END,
-        NOW()
+        p_current_rpc_url
     )
-    ON CONFLICT (chain_id)
+    ON CONFLICT (chain_id) 
     DO UPDATE SET
-        is_indexing = EXCLUDED.is_indexing,
-        last_error = EXCLUDED.last_error,
+        is_healthy = EXCLUDED.is_healthy,
+        last_checked = EXCLUDED.last_checked,
+        error_message = EXCLUDED.error_message,
         blocks_behind = EXCLUDED.blocks_behind,
         rpc_latency_ms = EXCLUDED.rpc_latency_ms,
-        status = EXCLUDED.status,
-        checked_at = EXCLUDED.checked_at,
-        last_successful_index = CASE 
-            WHEN EXCLUDED.last_error IS NULL AND chain_health.last_error IS NOT NULL 
-            THEN NOW() 
-            ELSE chain_health.last_successful_index 
-        END;
+        current_rpc_url = EXCLUDED.current_rpc_url;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -276,7 +268,7 @@ BEGIN
         cs.total_burns,
         cs.total_positions,
         CASE
-            WHEN ch.last_error IS NOT NULL THEN 'Error: ' || ch.last_error
+            WHEN ch.error_message IS NOT NULL THEN 'Error: ' || ch.error_message
             WHEN ch.blocks_behind > 1000 THEN 'Warning: ' || ch.blocks_behind || ' blocks behind'
             WHEN NOW() - COALESCE(ch.last_successful_index, '1970-01-01'::timestamp) > interval '1 hour' 
                 THEN 'Warning: No successful index in last hour'

@@ -1,7 +1,6 @@
-version: '3.8'
 networks:
-  xburn_network:
-    driver: bridge
+xburn_network:
+  driver: bridge
 
 services:
   postgres:
@@ -60,7 +59,7 @@ services:
       - ENABLED_CHAINS=base,ethereum,polygon,optimism,pulsechain,bsc,avalanche
       # Indexer configuration
       - INDEXER_INTERVAL_MS=15000
-      - BATCH_SIZE=5
+      - BATCH_SIZE=250
       - MAX_RETRIES=10
       - RETRY_DELAY=5000
       - MAX_BACKOFF_DELAY=60000

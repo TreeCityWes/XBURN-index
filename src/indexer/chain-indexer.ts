@@ -5,26 +5,6 @@ import { RPCProvider } from '../provider';
 import { ChainConfig } from '../config';
 import { indexerConfig } from '../config';
 
-// Chain-specific configurations
-const chainConfigs: { [key: string]: { delay: number } } = {
-    // Ethereum mainnet - most restrictive due to high load
-    '1': { delay: 5000 },
-    // Polygon - moderate restrictions
-    '137': { delay: 3000 },
-    // BSC - least restrictive
-    '56': { delay: 2000 },
-    // Optimism - moderate
-    '10': { delay: 3000 },
-    // Base - moderate
-    '8453': { delay: 3000 },
-    // PulseChain - least restrictive
-    '369': { delay: 2000 },
-    // Avalanche - moderate
-    '43114': { delay: 3000 },
-    // Default configuration
-    'default': { delay: 5000 }
-};
-
 const REORG_DEPTH = 20;
 const MAX_RETRIES = 10;
 const MAX_BACKOFF_DELAY = 60000; // Maximum backoff delay of 60 seconds
@@ -35,6 +15,11 @@ interface ProcessedEvent {
     args: ethers.Result;
 }
 
+// Define ABIs centrally
+const XEN_CONTRACT_ABI = ['event Transfer(address indexed from, address indexed to, uint256 value)'];
+const BURN_CONTRACT_ABI = ['event XENBurned(address indexed user, uint256 amount)'];
+// const NFT_CONTRACT_ABI = ['event BurnLockCreated(address indexed user, uint256 indexed tokenId, uint256 amount, uint256 lockDuration)']; // Assuming not used based on processEvents
+
 export class ChainIndexer {
     private provider: RPCProvider;
     private db: Pool;
@@ -42,43 +27,43 @@ export class ChainIndexer {
     private isRunning: boolean = false;
     private shouldStop: boolean = false;
     private lastProcessedBlock: number = 0;
-    private eventHandlers: Map<string, ethers.Contract>;
+    // private eventHandlers: Map<string, ethers.Contract>; // Removed
 
     constructor(chainConfig: ChainConfig, provider: RPCProvider, db: Pool) {
         this.chainConfig = chainConfig;
         this.provider = provider;
         this.db = db;
         this.lastProcessedBlock = chainConfig.startBlock;
-        this.eventHandlers = new Map();
-        this.initializeEventHandlers();
+        // this.eventHandlers = new Map(); // Removed
+        // this.initializeEventHandlers(); // Removed
     }
 
-    private async initializeEventHandlers() {
-        const provider = await this.provider.getProvider();
+    // private async initializeEventHandlers() { // Removed
+    //     const provider = await this.provider.getProvider();
         
-        // Initialize contracts with minimal ABI (just the events we need)
-        const xenContract = new ethers.Contract(
-            this.chainConfig.contracts.xen,
-            ['event Transfer(address indexed from, address indexed to, uint256 value)'],
-            provider
-        );
+    //     // Initialize contracts with minimal ABI (just the events we need)
+    //     const xenContract = new ethers.Contract(
+    //         this.chainConfig.contracts.xen,
+    //         ['event Transfer(address indexed from, address indexed to, uint256 value)'],
+    //         provider
+    //     );
 
-        const burnContract = new ethers.Contract(
-            this.chainConfig.contracts.xburnMinter,
-            ['event XENBurned(address indexed user, uint256 amount)'],
-            provider
-        );
+    //     const burnContract = new ethers.Contract(
+    //         this.chainConfig.contracts.xburnMinter,
+    //         ['event XENBurned(address indexed user, uint256 amount)'],
+    //         provider
+    //     );
 
-        const nftContract = new ethers.Contract(
-            this.chainConfig.contracts.xburnNft,
-            ['event BurnLockCreated(address indexed user, uint256 indexed tokenId, uint256 amount, uint256 lockDuration)'],
-            provider
-        );
+    //     const nftContract = new ethers.Contract(
+    //         this.chainConfig.contracts.xburnNft,
+    //         ['event BurnLockCreated(address indexed user, uint256 indexed tokenId, uint256 amount, uint256 lockDuration)'],
+    //         provider
+    //     );
 
-        this.eventHandlers.set('xen', xenContract);
-        this.eventHandlers.set('burn', burnContract);
-        this.eventHandlers.set('nft', nftContract);
-    }
+    //     this.eventHandlers.set('xen', xenContract);
+    //     this.eventHandlers.set('burn', burnContract);
+    //     this.eventHandlers.set('nft', nftContract);
+    // }
 
     async start() {
         if (this.isRunning) {
@@ -122,18 +107,14 @@ export class ChainIndexer {
     }
 
     private async exponentialBackoff(retryCount: number): Promise<void> {
-        const delay = Math.min(chainConfigs.default.delay * Math.pow(2, retryCount), MAX_BACKOFF_DELAY);
+        // Use global retryDelay and maxBackoffDelay from indexerConfig for consistency
+        const delay = Math.min(indexerConfig.retryDelay * Math.pow(2, retryCount), indexerConfig.maxBackoffDelay);
+        logger.debug(`Exponential backoff: waiting ${delay}ms for chain ${this.chainConfig.name}`);
         await new Promise(resolve => setTimeout(resolve, delay));
     }
 
     private async processBatch(startBlock: number, endBlock: number, retryCount: number = 0): Promise<void> {
         try {
-            // Get chain-specific configuration
-            const config = chainConfigs[this.chainConfig.id.toString()] || chainConfigs.default;
-            
-            // Add chain-specific delay between requests
-            await new Promise(resolve => setTimeout(resolve, config.delay));
-
             const events = await Promise.all([
                 this.getTransferEvents(startBlock, endBlock),
                 this.getBurnEvents(startBlock, endBlock)
@@ -169,22 +150,22 @@ export class ChainIndexer {
                 const latestBlock = await provider.getBlockNumber();
                 
                 if (this.lastProcessedBlock >= latestBlock) {
-                    // Wait for new blocks
-                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    // Wait for new blocks - use indexerConfig.pollingInterval
+                    logger.debug(`Chain ${this.chainConfig.name} caught up to latest block ${latestBlock}. Waiting ${indexerConfig.pollingInterval}ms.`);
+                    await new Promise(resolve => setTimeout(resolve, indexerConfig.pollingInterval));
                     continue;
                 }
 
-                // Get chain-specific configuration
-                const config = chainConfigs[this.chainConfig.id.toString()] || chainConfigs.default;
                 // Use global batch size from indexerConfig
                 const batchSize = indexerConfig.batchSize;
-                const startBlock = this.lastProcessedBlock + 1;
-                const endBlock = Math.min(startBlock + batchSize - 1, latestBlock);
+                const startBlockNum = this.lastProcessedBlock + 1;
+                const endBlockNum = Math.min(startBlockNum + batchSize - 1, latestBlock);
                 
-                await this.processBatch(startBlock, endBlock);
+                logger.info(`Processing batch for ${this.chainConfig.name}: ${startBlockNum} to ${endBlockNum} (latest: ${latestBlock})`);
+                await this.processBatch(startBlockNum, endBlockNum);
                 
                 // Update last processed block
-                this.lastProcessedBlock = endBlock;
+                this.lastProcessedBlock = endBlockNum;
 
                 // Update chain status
                 await this.updateChainStatus(this.lastProcessedBlock);
@@ -200,7 +181,9 @@ export class ChainIndexer {
     }
 
     private async getTransferEvents(startBlock: number, endBlock: number): Promise<ProcessedEvent[]> {
-        const xenEvents = await this.eventHandlers.get('xen')!.queryFilter('Transfer', startBlock, endBlock);
+        const currentProvider = await this.provider.getProvider();
+        const xenContract = new ethers.Contract(this.chainConfig.contracts.xen, XEN_CONTRACT_ABI, currentProvider);
+        const xenEvents = await xenContract.queryFilter('Transfer', startBlock, endBlock);
         return xenEvents.map(event => ({
             contract: 'xen',
             event: event as ethers.EventLog,
@@ -209,7 +192,9 @@ export class ChainIndexer {
     }
 
     private async getBurnEvents(startBlock: number, endBlock: number): Promise<ProcessedEvent[]> {
-        const burnEvents = await this.eventHandlers.get('burn')!.queryFilter('XENBurned', startBlock, endBlock);
+        const currentProvider = await this.provider.getProvider();
+        const burnContract = new ethers.Contract(this.chainConfig.contracts.xburnMinter, BURN_CONTRACT_ABI, currentProvider);
+        const burnEvents = await burnContract.queryFilter('XENBurned', startBlock, endBlock);
         return burnEvents.map(event => ({
             contract: 'burn',
             event: event as ethers.EventLog,

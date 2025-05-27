@@ -1,22 +1,19 @@
 import { ethers } from 'ethers';
 import { Pool } from 'pg';
 import { chainLogger } from '../utils/logger';
-
-export interface ChainConfig {
-    chainId: string;
-    name: string;
-    rpcUrl: string;
-    provider: ethers.JsonRpcProvider;
-}
+import { RPCProvider } from '../provider';
+import { ChainConfig as AppChainConfig } from '../config';
 
 export class IndexerHealthMonitor {
     private db: Pool;
-    private chains: Map<string, ChainConfig>;
+    private rpcProviders: Map<string, RPCProvider>;
+    private appChains: AppChainConfig[];
     private checkInterval: NodeJS.Timeout | null = null;
 
-    constructor(db: Pool, chains: Map<string, ChainConfig>) {
+    constructor(db: Pool, rpcProviders: Map<string, RPCProvider>) {
         this.db = db;
-        this.chains = chains;
+        this.rpcProviders = rpcProviders;
+        this.appChains = Object.values(require('../config').chains);
     }
 
     async start(intervalMs: number = 60000) {
@@ -25,7 +22,7 @@ export class IndexerHealthMonitor {
         
         chainLogger.info('Health monitoring started', {
             chainName: 'System',
-            message: `Monitoring ${this.chains.size} chains with ${intervalMs}ms interval`
+            message: `Monitoring ${this.rpcProviders.size} chains with ${intervalMs}ms interval`
         });
     }
 
@@ -37,12 +34,14 @@ export class IndexerHealthMonitor {
     }
 
     private async checkAllChains() {
-        for (const [chainId, config] of this.chains.entries()) {
+        for (const [chainId, rpcProvider] of this.rpcProviders.entries()) {
+            const appChainConfig = this.appChains.find(c => c.id.toString() === chainId);
+            const chainName = appChainConfig ? appChainConfig.name : `Chain ${chainId}`;
             try {
-                await this.checkChainHealth(chainId, config);
+                await this.checkChainHealth(chainId, chainName, rpcProvider);
             } catch (error) {
                 chainLogger.error('Chain health check failed', {
-                    chainName: config.name,
+                    chainName: chainName,
                     error,
                     message: `Failed to check health for chain ${chainId}`
                 });
@@ -50,11 +49,17 @@ export class IndexerHealthMonitor {
         }
     }
 
-    private async checkChainHealth(chainId: string, config: ChainConfig) {
+    private async checkChainHealth(chainId: string, chainName: string, rpcProvider: RPCProvider) {
         const startTime = Date.now();
+        let currentProviderForHealthCheck: ethers.Provider | null = null;
+        let currentRpcUrlForHealthCheck: string = 'unknown';
+
         try {
+            currentProviderForHealthCheck = await rpcProvider.getProvider();
+            currentRpcUrlForHealthCheck = rpcProvider.getCurrentProviderUrl();
+            
             // Check RPC connection and get latest block
-            const latestBlock = await config.provider.getBlockNumber();
+            const latestBlock = await currentProviderForHealthCheck.getBlockNumber();
             const rpcLatencyMs = Date.now() - startTime;
 
             // Get last indexed block from database
@@ -68,29 +73,29 @@ export class IndexerHealthMonitor {
 
             // Update chain health status
             await this.db.query(
-                'SELECT update_chain_health($1, $2, $3, $4, $5)',
-                [chainId, true, null, blocksBehind, rpcLatencyMs]
+                'SELECT update_chain_health($1, $2, $3, $4, $5, $6)',
+                [chainId, true, null, blocksBehind, rpcLatencyMs, currentRpcUrlForHealthCheck]
             );
 
             chainLogger.info('Chain health status', {
-                chainName: config.name,
+                chainName: chainName,
                 blockNumber: latestBlock,
                 latency: rpcLatencyMs,
-                message: `Blocks behind: ${blocksBehind}, Last indexed: ${lastIndexedBlock}`
+                message: `RPC: ${currentRpcUrlForHealthCheck}, Blocks behind: ${blocksBehind}, Last indexed: ${lastIndexedBlock}`
             });
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             
             await this.db.query(
-                'SELECT update_chain_health($1, $2, $3, $4, $5)',
-                [chainId, false, errorMessage, null, null]
+                'SELECT update_chain_health($1, $2, $3, $4, $5, $6)',
+                [chainId, false, errorMessage, null, null, currentRpcUrlForHealthCheck]
             );
 
             chainLogger.error('Chain health check error', {
-                chainName: config.name,
+                chainName: chainName,
                 error: error instanceof Error ? error : new Error(String(error)),
-                message: `Failed to get chain health status`
+                message: `Failed to get chain health status for RPC: ${currentRpcUrlForHealthCheck}`
             });
         }
     }
