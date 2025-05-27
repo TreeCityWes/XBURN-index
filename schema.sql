@@ -316,12 +316,12 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_user_stats(
     p_chain_id VARCHAR(10),
     p_user_address VARCHAR(42),
-    p_xen_burned NUMERIC DEFAULT 0,
-    p_burn_count INTEGER DEFAULT 0,
-    p_nft_position_count INTEGER DEFAULT 0,
-    p_xen_locked NUMERIC DEFAULT 0,
-    p_swap_burn_count INTEGER DEFAULT 0,
-    p_xen_swapped NUMERIC DEFAULT 0,
+    p_xen_burned NUMERIC,
+    p_burn_count INTEGER,
+    p_nft_position_count INTEGER,
+    p_xen_locked NUMERIC,
+    p_swap_burn_count INTEGER,
+    p_xen_swapped NUMERIC,
     p_timestamp TIMESTAMP
 )
 RETURNS void AS $$

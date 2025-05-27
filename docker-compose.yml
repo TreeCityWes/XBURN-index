@@ -52,12 +52,22 @@ services:
     volumes:
       - metabase_data:/metabase-data
     environment:
+      # Metabase database configuration
       - MB_DB_TYPE=postgres
       - MB_DB_DBNAME=metabase
       - MB_DB_PORT=5432
       - MB_DB_USER=postgres
       - MB_DB_PASS=postgres
       - MB_DB_HOST=postgres
+      # Auto-setup configuration
+      - MB_SETUP_TOKEN=xburn-analytics-setup-token
+      - MB_SITE_NAME=XBurn Analytics Dashboard
+      - MB_ADMIN_EMAIL=admin@xburn.com
+      - MB_ADMIN_FIRST_NAME=Admin
+      - MB_ADMIN_LAST_NAME=User
+      - MB_ADMIN_PASSWORD=admin123!
+      # Pre-configure the analytics database connection
+      - MB_DB_CONNECTION_URI=postgresql://postgres:postgres@postgres:5432/xen_burn_analytics
 
   indexer:
     build: .
