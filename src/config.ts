@@ -18,12 +18,10 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 8453,
     name: 'Base',
     rpcUrls: [
-      `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://mainnet.base.org',
       'https://base.blockpi.network/v1/rpc/public',
       'https://base.publicnode.com',
-      'https://base-rpc.publicnode.com',
-      'https://base.drpc.org'
+      'https://base-rpc.publicnode.com'
     ],
     contracts: {
       xen: '0xffcbF84650cE02DaFE96926B37a0ac5E34932fa5',
@@ -37,11 +35,8 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 1,
     name: 'Ethereum',
     rpcUrls: [
-      `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://eth-mainnet.public.blastapi.io',
-      'https://eth.drpc.org',
       'https://ethereum.publicnode.com',
-      'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
       'https://rpc.flashbots.net'
     ],
     contracts: {
@@ -56,15 +51,12 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 137,
     name: 'Polygon',
     rpcUrls: [
-      `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://polygon-rpc.com',
       'https://polygon-bor.publicnode.com',
-      'https://polygon.drpc.org',
       'https://polygon-mainnet.public.blastapi.io',
       'https://polygon.blockpi.network/v1/rpc/public',
       'https://polygon.llamarpc.com',
       'https://rpc-mainnet.matic.network',
-      'https://rpc-mainnet.maticvigil.com',
       'https://endpoints.omniatech.io/v1/matic/mainnet/public'
     ],
     contracts: {
@@ -79,10 +71,8 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 10,
     name: 'Optimism',
     rpcUrls: [
-      `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://mainnet.optimism.io',
       'https://optimism.publicnode.com',
-      'https://1rpc.io/op',
       'https://optimism-mainnet.public.blastapi.io',
       'https://optimism.blockpi.network/v1/rpc/public',
       'https://endpoints.omniatech.io/v1/op/mainnet/public'
@@ -101,8 +91,7 @@ export const chains: { [key: string]: ChainConfig } = {
     rpcUrls: [
       'https://rpc.pulsechain.com',
       'https://pulsechain.publicnode.com',
-      'https://rpc-pulsechain.g4mm4.io',
-      'https://pulsechain-rpc.publicnode.com'
+      'https://rpc-pulsechain.g4mm4.io'
     ],
     contracts: {
       xen: '0x8a7FDcA264e87b6da72D000f22186B4403081A2a',
@@ -122,42 +111,28 @@ export const chains: { [key: string]: ChainConfig } = {
       'https://bsc-dataseed2.binance.org',
       'https://bsc-dataseed3.binance.org',
       'https://bsc-dataseed4.binance.org',
-      'https://bsc-dataseed1.defibit.io',
-      'https://bsc-dataseed2.defibit.io',
-      'https://bsc-dataseed3.defibit.io',
-      'https://bsc-dataseed4.defibit.io',
-      'https://bsc-dataseed1.ninicoin.io',
-      'https://bsc-dataseed2.ninicoin.io',
-      'https://bsc-dataseed3.ninicoin.io',
-      'https://bsc-dataseed4.ninicoin.io',
-      'https://bsc.drpc.org',
-      'https://1rpc.io/bnb',
       'https://bsc-mainnet.public.blastapi.io',
-      'https://bsc.blockpi.network/v1/rpc/public',
-      'https://bscrpc.com'
+      'https://bsc.blockpi.network/v1/rpc/public'
     ],
     contracts: {
       xen: '0x2AB0e9e4eE70FFf1fB9D67031E44F6410170d00e',
       xburnMinter: '0x12cf65e044a59e85f38497c413f24de6d33250ba',
       xburnNft: '0xf0ca18f2462936df8332f88c4cf27a03d829dbb2'
     },
-    startBlock: 28000000,
+    startBlock: 40000000,
     gasPrice: '0.1'
   },
   avalanche: {
     id: 43114,
     name: 'Avalanche',
     rpcUrls: [
-      `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://api.avax.network/ext/bc/C/rpc',
       'https://avalanche-evm.publicnode.com',
       'https://avalanche-c-chain-rpc.publicnode.com',
       'https://ava-mainnet.public.blastapi.io/ext/bc/C/rpc',
       'https://avalanche.blockpi.network/v1/rpc/public',
       'https://endpoints.omniatech.io/v1/avax/mainnet/public',
-      'https://avalanche-c-chain.publicnode.com',
-      'https://avalanche.drpc.org',
-      'https://1rpc.io/avax/c'
+      'https://avalanche-c-chain.publicnode.com'
     ],
     contracts: {
       xen: '0xC0C5AA69Dbe4d6DDdfBc89c0957686ec60F24389',
@@ -181,7 +156,7 @@ export const dbConfig = {
 // Indexer configuration
 export const indexerConfig = {
   pollingInterval: parseInt(process.env.INDEXER_INTERVAL_MS || '15000'),
-  batchSize: parseInt(process.env.BATCH_SIZE || '3'),
+  batchSize: parseInt(process.env.BATCH_SIZE || '250'),
   maxRetries: parseInt(process.env.MAX_RETRIES || '5'),
   retryDelay: parseInt(process.env.RETRY_DELAY || '5000'),
   maxBackoffDelay: parseInt(process.env.MAX_BACKOFF_DELAY || '60000'),
