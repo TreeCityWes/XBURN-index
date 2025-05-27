@@ -42,7 +42,7 @@ async function initializeDatabase() {
         }
 
         console.log('🎉 Database initialization completed successfully');
-
+        process.exit(0);
     } catch (error) {
         console.error('❌ Error during database initialization:', error);
         throw error;

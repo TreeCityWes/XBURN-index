@@ -42,11 +42,10 @@ psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "DROP VIEW IF EXISTS top
 echo "📋 Applying database schema..."
 psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f /app/schema.sql
 
-# Run TypeScript initialization
+# Run TypeScript initialization. The Node.js script will handle exiting.
 echo "🔧 Running TypeScript initialization..."
 cd /app && npm run init-db
 
-echo "🎉 Database initialization completed successfully"
-
-# Ensure the script exits properly
-exec kill -9 1 
+# If the script reaches here, npm run init-db exited successfully.
+# init.sh itself will then exit, and Docker should see the container as completed.
+echo "✨ init.sh completed." 
