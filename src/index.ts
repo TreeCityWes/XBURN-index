@@ -57,8 +57,11 @@ class IndexerManager {
                     this.indexers.set(chainConfig.id.toString(), indexer);
 
                     // Start indexing
-                    await indexer.start();
-                    logger.info(`Started indexer for ${chainName}`);
+                    indexer.start().then(() => {
+                        logger.info(`Started indexer for ${chainName}`);
+                    }).catch(error => {
+                        logger.error(`Error starting indexer for ${chainName}:`, error);
+                    });
 
                 } catch (error) {
                     logger.error(`Error initializing chain ${chainName}:`, error);
