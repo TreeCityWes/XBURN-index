@@ -89,6 +89,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+      - ./logs:/app/logs
     command: npm run dev
     restart: unless-stopped
 
