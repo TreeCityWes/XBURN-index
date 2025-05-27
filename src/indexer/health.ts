@@ -71,31 +71,46 @@ export class IndexerHealthMonitor {
             const lastIndexedBlock = chainData?.last_indexed_block || 0;
             const blocksBehind = latestBlock - lastIndexedBlock;
 
-            // Update chain health status
+            // Update chain health status - match SQL function parameter names
             await this.db.query(
                 'SELECT update_chain_health($1, $2, $3, $4, $5, $6)',
-                [chainId, true, null, blocksBehind, rpcLatencyMs, currentRpcUrlForHealthCheck]
+                [
+                    chainId,               // p_chain_id
+                    true,                  // p_is_healthy
+                    null,                  // p_error_message
+                    blocksBehind,          // p_blocks_behind
+                    rpcLatencyMs,          // p_rpc_latency_ms
+                    currentRpcUrlForHealthCheck // p_current_rpc_url
+                ]
             );
 
             chainLogger.info('Chain health status', {
                 chainName: chainName,
                 blockNumber: latestBlock,
                 latency: rpcLatencyMs,
-                message: `RPC: ${currentRpcUrlForHealthCheck}, Blocks behind: ${blocksBehind}, Last indexed: ${lastIndexedBlock}`
+                message: `Blocks behind: ${blocksBehind}, Last indexed: ${lastIndexedBlock} (Block: ${latestBlock}) (Latency: ${rpcLatencyMs}ms)`
             });
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             
+            // Update chain health with error - match SQL function parameter names
             await this.db.query(
                 'SELECT update_chain_health($1, $2, $3, $4, $5, $6)',
-                [chainId, false, errorMessage, null, null, currentRpcUrlForHealthCheck]
+                [
+                    chainId,               // p_chain_id
+                    false,                 // p_is_healthy
+                    errorMessage,          // p_error_message
+                    null,                  // p_blocks_behind
+                    null,                  // p_rpc_latency_ms
+                    currentRpcUrlForHealthCheck // p_current_rpc_url
+                ]
             );
 
-            chainLogger.error('Chain health check error', {
+            chainLogger.error('RPC health check failed', {
                 chainName: chainName,
                 error: error instanceof Error ? error : new Error(String(error)),
-                message: `Failed to get chain health status for RPC: ${currentRpcUrlForHealthCheck}`
+                message: `Provider ${currentRpcUrlForHealthCheck} failed health check`
             });
         }
     }

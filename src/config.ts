@@ -42,9 +42,11 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 1,
     name: 'Ethereum',
     rpcUrls: [
-      'https://eth-mainnet.public.blastapi.io',
       'https://ethereum.publicnode.com',
-      'https://rpc.flashbots.net'
+      'https://eth.llamarpc.com',
+      'https://ethereum.blockpi.network/v1/rpc/public',
+      'https://eth-mainnet.nodereal.io/v1/1659dfb40aa24bbb8153a677b98064d7',
+      'https://eth-pokt.nodies.app'
     ],
     contracts: {
       xen: '0x06450dEe7FD2Fb8E39061434BAbCFC05599a6Fb8',
@@ -126,7 +128,7 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0x12cf65e044a59e85f38497c413f24de6d33250ba',
       xburnNft: '0xf0ca18f2462936df8332f88c4cf27a03d829dbb2'
     },
-    startBlock: 49882565,
+    startBlock: 50000000,
     gasPrice: '0.1'
   },
   avalanche: {

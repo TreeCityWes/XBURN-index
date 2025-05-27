@@ -180,7 +180,7 @@ BEGIN
     INSERT INTO chain_health (
         chain_id, 
         is_healthy, 
-        last_checked, 
+        checked_at, 
         error_message, 
         blocks_behind, 
         rpc_latency_ms,
@@ -198,7 +198,7 @@ BEGIN
     ON CONFLICT (chain_id) 
     DO UPDATE SET
         is_healthy = EXCLUDED.is_healthy,
-        last_checked = EXCLUDED.last_checked,
+        checked_at = EXCLUDED.checked_at,
         error_message = EXCLUDED.error_message,
         blocks_behind = EXCLUDED.blocks_behind,
         rpc_latency_ms = EXCLUDED.rpc_latency_ms,
