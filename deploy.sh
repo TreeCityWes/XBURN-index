@@ -37,19 +37,13 @@ cat > fix_typescript.sh << 'EOF'
 # Fix src/provider.ts
 if [ -f "src/provider.ts" ]; then
     echo "Fixing src/provider.ts..."
-    # Remove global declarations and fix NodeJS.Timeout
-    sed -i '/^\/\/ Add NodeJS types declaration$/,/^}$/d' src/provider.ts
     sed -i 's/NodeJS\.Timeout/ReturnType<typeof setInterval>/g' src/provider.ts
 fi
 
 # Fix src/indexer/health.ts
 if [ -f "src/indexer/health.ts" ]; then
     echo "Fixing src/indexer/health.ts..."
-    # Remove global declarations
-    sed -i '/^\/\/ Add Node\.js types declaration$/,/^}$/d' src/indexer/health.ts
-    # Fix NodeJS.Timeout references
     sed -i 's/NodeJS\.Timeout/ReturnType<typeof setInterval>/g' src/indexer/health.ts
-    # Fix database query destructuring
     sed -i 's/const { rows: \[chainData\] } = await/const result = await/g' src/indexer/health.ts
     sed -i '/const result = await.*query(/a\            const chainData = result?.rows?.[0];' src/indexer/health.ts
     sed -i 's/const { rows } = await this\.dbs\.get(.System.)/const result = await this.dbs.get("System")/g' src/indexer/health.ts
@@ -59,12 +53,9 @@ fi
 # Fix src/indexer/chain-indexer.ts
 if [ -f "src/indexer/chain-indexer.ts" ]; then
     echo "Fixing src/indexer/chain-indexer.ts..."
-    # Fix setTimeout references by adding proper typing
     sed -i 's/setTimeout(resolve, 1000)/setTimeout(() => resolve(), 1000)/g' src/indexer/chain-indexer.ts
     sed -i 's/setTimeout(resolve, delay)/setTimeout(() => resolve(), delay)/g' src/indexer/chain-indexer.ts
-    # Fix __dirname reference
     sed -i 's/__dirname/process.cwd()/g' src/indexer/chain-indexer.ts
-    # Fix event type issues
     sed -i 's/processEvents(events: Log\[\])/processEvents(events: any[])/g' src/indexer/chain-indexer.ts
 fi
 
@@ -86,37 +77,7 @@ docker-compose down --remove-orphans
 
 # Remove old volumes to ensure clean state
 echo "🧹 Cleaning up old volumes..."
-docker volume rm backend_postgres_data backend_metabase_data 2>/dev/null || true
-
-# Start postgres first
-echo "🐘 Starting PostgreSQL..."
-docker-compose up -d postgres
-
-# Wait for postgres to be ready with better health checking
-echo "⏳ Waiting for PostgreSQL to be ready..."
-for i in {1..30}; do
-    if docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
-        echo "✅ PostgreSQL is ready!"
-        break
-    fi
-    echo "Waiting for PostgreSQL... ($i/30)"
-    sleep 2
-done
-
-# Create metabase database
-echo "🗄️ Setting up Metabase database..."
-docker-compose exec -T postgres psql -U postgres -c "
-DO \$\$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'metabase') THEN
-        CREATE DATABASE metabase;
-        RAISE NOTICE 'Created metabase database';
-    ELSE
-        RAISE NOTICE 'Metabase database already exists';
-    END IF;
-END
-\$\$;
-" || echo "Metabase database setup completed"
+docker volume rm xburn-index_postgres_data 2>/dev/null || true
 
 # Build and start all services
 echo "🏗️ Building and starting all services..."
@@ -139,7 +100,6 @@ docker-compose logs --tail=20 indexer
 echo ""
 echo "🎉 Deployment Summary:"
 echo "================================"
-echo "Metabase Dashboard: http://$(hostname -I | awk '{print $1}'):3001"
 echo "API Health Check: http://$(hostname -I | awk '{print $1}'):3000/health/chains"
 echo ""
 echo "To view live logs:"

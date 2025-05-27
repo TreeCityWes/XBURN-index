@@ -13,7 +13,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - xburn_network
     restart: unless-stopped
@@ -39,60 +38,24 @@ services:
       - DB_NAME=xen_burn_analytics
       - DB_SSL=false
 
-  metabase:
-    image: metabase/metabase
-    ports:
-      - "3001:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - xburn_network
-    restart: unless-stopped
-    volumes:
-      - metabase_data:/metabase-data
-    environment:
-      # Metabase database configuration
-      - MB_DB_TYPE=postgres
-      - MB_DB_DBNAME=metabase
-      - MB_DB_PORT=5432
-      - MB_DB_USER=postgres
-      - MB_DB_PASS=postgres
-      - MB_DB_HOST=postgres
-      # Auto-setup configuration
-      - MB_SETUP_TOKEN=xburn-analytics-setup-token
-      - MB_SITE_NAME=XBurn Analytics Dashboard
-      - MB_ADMIN_EMAIL=admin@xburn.com
-      - MB_ADMIN_FIRST_NAME=Admin
-      - MB_ADMIN_LAST_NAME=User
-      - MB_ADMIN_PASSWORD=admin123!
-      # Pre-configure the analytics database connection
-      - MB_DB_CONNECTION_URI=postgresql://postgres:postgres@postgres:5432/xen_burn_analytics
-
   indexer:
     build: .
     environment:
-      # Database configuration - single database for all chains
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=xen_burn_analytics
       - DB_SSL=false
-      # Alchemy API Key
       - ALCHEMY_API_KEY=${ALCHEMY_API_KEY}
-      # Enable all chains by default
       - ENABLED_CHAINS=base,ethereum,polygon,optimism,pulsechain,bsc,avalanche
-      # Indexer configuration
       - INDEXER_INTERVAL_MS=15000
       - BATCH_SIZE=100
       - MAX_RETRIES=5
       - RETRY_DELAY=3000
       - MAX_BACKOFF_DELAY=30000
-      # Application settings
       - API_PORT=3000
       - LOG_LEVEL=info
-      # Node environment
       - NODE_ENV=production
     ports:
       - "3000:3000"
@@ -114,5 +77,4 @@ services:
       retries: 3
 
 volumes:
-  postgres_data:
-  metabase_data: 
+  postgres_data: 
