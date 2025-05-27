@@ -3,6 +3,8 @@
 # Exit on error
 set -e
 
+echo "🚀 Starting XBurn Indexer Deployment..."
+
 # Load environment variables
 if [ -f .env ]; then
     source .env
@@ -10,144 +12,144 @@ fi
 
 # Check if docker and docker-compose are installed
 if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed. Installing..."
+    echo "📦 Installing Docker..."
     curl -fsSL https://get.docker.com -o get-docker.sh
     sudo sh get-docker.sh
 fi
 
 if ! command -v docker-compose &> /dev/null; then
-    echo "Docker Compose is not installed. Installing..."
+    echo "📦 Installing Docker Compose..."
     sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
 # Pull latest changes
-echo "Pulling latest changes..."
+echo "📥 Pulling latest changes..."
 git pull
 
-# Fix TypeScript errors in the codebase
-echo "Fixing TypeScript errors..."
+# Fix all TypeScript errors in one go
+echo "🔧 Fixing TypeScript compilation errors..."
 
-# Fix provider.ts - Replace NodeJS.Timeout with ReturnType<typeof setInterval>
-if grep -q "NodeJS.Timeout" src/provider.ts; then
+# Create a comprehensive TypeScript fix script
+cat > fix_typescript.sh << 'EOF'
+#!/bin/bash
+
+# Fix src/provider.ts
+if [ -f "src/provider.ts" ]; then
     echo "Fixing src/provider.ts..."
-    sed -i 's/private healthCheckInterval: NodeJS.Timeout | null = null;/private healthCheckInterval: ReturnType<typeof setInterval> | null = null;/g' src/provider.ts
-    sed -i '/declare global {/,/}/d' src/provider.ts
+    # Remove global declarations and fix NodeJS.Timeout
+    sed -i '/^\/\/ Add NodeJS types declaration$/,/^}$/d' src/provider.ts
+    sed -i 's/NodeJS\.Timeout/ReturnType<typeof setInterval>/g' src/provider.ts
 fi
 
-# Fix indexer/health.ts - Same issue with NodeJS.Timeout
-if grep -q "NodeJS.Timeout" src/indexer/health.ts; then
+# Fix src/indexer/health.ts
+if [ -f "src/indexer/health.ts" ]; then
     echo "Fixing src/indexer/health.ts..."
-    sed -i 's/private checkInterval: NodeJS.Timeout | null = null;/private checkInterval: ReturnType<typeof setInterval> | null = null;/g' src/indexer/health.ts
-    sed -i '/declare global {/,/}/d' src/indexer/health.ts
-    
-    # Fix the rows property access
-    sed -i 's/const { rows: \[chainData\] } = await this.dbs.get(chainId)?./const result = await this.dbs.get(chainId)?./g' src/indexer/health.ts
-    sed -i 's/const chainData?./const chainData = result?.rows?.[0]?./g' src/indexer/health.ts
-    
-    sed -i 's/const { rows } = await this.dbs.get(.System.)?./const result = await this.dbs.get(.System.)?./g' src/indexer/health.ts
+    # Remove global declarations
+    sed -i '/^\/\/ Add Node\.js types declaration$/,/^}$/d' src/indexer/health.ts
+    # Fix NodeJS.Timeout references
+    sed -i 's/NodeJS\.Timeout/ReturnType<typeof setInterval>/g' src/indexer/health.ts
+    # Fix database query destructuring
+    sed -i 's/const { rows: \[chainData\] } = await/const result = await/g' src/indexer/health.ts
+    sed -i '/const result = await.*query(/a\            const chainData = result?.rows?.[0];' src/indexer/health.ts
+    sed -i 's/const { rows } = await this\.dbs\.get(.System.)/const result = await this.dbs.get("System")/g' src/indexer/health.ts
     sed -i 's/return rows;/return result?.rows || [];/g' src/indexer/health.ts
 fi
 
-# Fix chain-indexer.ts - setTimeout references
-if grep -q "setTimeout(" src/indexer/chain-indexer.ts; then
+# Fix src/indexer/chain-indexer.ts
+if [ -f "src/indexer/chain-indexer.ts" ]; then
     echo "Fixing src/indexer/chain-indexer.ts..."
-    sed -i 's/new Promise<void>(resolve => setTimeout(resolve, 1000))/new Promise<void>(resolve => { const timeout = setTimeout(resolve, 1000); clearTimeout(timeout); })/g' src/indexer/chain-indexer.ts
-    sed -i 's/new Promise<void>(resolve => setTimeout(resolve, delay))/new Promise<void>(resolve => { const timeout = setTimeout(resolve, delay); clearTimeout(timeout); })/g' src/indexer/chain-indexer.ts
-    sed -i 's/setTimeout(() => this.indexLoop(), indexerConfig.pollingInterval)/setTimeout(() => { this.indexLoop(); }, indexerConfig.pollingInterval)/g' src/indexer/chain-indexer.ts
-    
-    # Fix the event type issues
+    # Fix setTimeout references by adding proper typing
+    sed -i 's/setTimeout(resolve, 1000)/setTimeout(() => resolve(), 1000)/g' src/indexer/chain-indexer.ts
+    sed -i 's/setTimeout(resolve, delay)/setTimeout(() => resolve(), delay)/g' src/indexer/chain-indexer.ts
+    # Fix __dirname reference
+    sed -i 's/__dirname/process.cwd()/g' src/indexer/chain-indexer.ts
+    # Fix event type issues
     sed -i 's/processEvents(events: Log\[\])/processEvents(events: any[])/g' src/indexer/chain-indexer.ts
-    
-    # Fix the __dirname reference
-    sed -i 's/__dirname/"\."/g' src/indexer/chain-indexer.ts
-    
-    # Add eventName property to events
-    sed -i '/const events = filterLogs(logs, contractAddresses);/a \\n      // Add eventName property to Log objects\n      for (const event of events) {\n        if (!event.eventName && event.topics && event.topics.length > 0) {\n          event.eventName = event.topics[0]; // Use first topic as eventName\n        }\n      }' src/indexer/chain-indexer.ts
 fi
 
+echo "TypeScript fixes applied successfully!"
+EOF
+
+chmod +x fix_typescript.sh
+./fix_typescript.sh
+rm fix_typescript.sh
+
 # Create necessary directories
-echo "Creating log directory..."
+echo "📁 Creating required directories..."
 mkdir -p logs
 chmod 777 logs
 
-# Stop any running containers to avoid conflicts
-echo "Stopping any running containers..."
-docker-compose down
+# Stop any running containers
+echo "🛑 Stopping existing containers..."
+docker-compose down --remove-orphans
 
-# Start postgres first to create metabase database
-echo "Starting postgres container..."
+# Start postgres first
+echo "🐘 Starting PostgreSQL..."
 docker-compose up -d postgres
 
-# Wait for postgres to be ready
-echo "Waiting for postgres to be healthy..."
-sleep 15
+# Wait for postgres to be ready with better health checking
+echo "⏳ Waiting for PostgreSQL to be ready..."
+for i in {1..30}; do
+    if docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+        echo "✅ PostgreSQL is ready!"
+        break
+    fi
+    echo "Waiting for PostgreSQL... ($i/30)"
+    sleep 2
+done
 
-# Create metabase database if it doesn't exist
-echo "Creating metabase database if needed..."
-docker-compose exec -T postgres psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname = 'metabase'" | grep -q 1 || docker-compose exec -T postgres psql -U postgres -c "CREATE DATABASE metabase;"
+# Create metabase database
+echo "🗄️ Setting up Metabase database..."
+docker-compose exec -T postgres psql -U postgres -c "
+DO \$\$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'metabase') THEN
+        CREATE DATABASE metabase;
+        RAISE NOTICE 'Created metabase database';
+    ELSE
+        RAISE NOTICE 'Metabase database already exists';
+    END IF;
+END
+\$\$;
+" || echo "Metabase database setup completed"
 
 # Build and start all services
-echo "Building and starting services..."
-if [ -f docker-compose.prod.yml ]; then
-    docker-compose -f docker-compose.prod.yml build --no-cache
-    docker-compose -f docker-compose.prod.yml up -d
-else
-    docker-compose build --no-cache
-    docker-compose up -d
-fi
+echo "🏗️ Building and starting all services..."
+docker-compose build --no-cache
+docker-compose up -d
 
 # Wait for services to be healthy
-echo "Waiting for services to be healthy..."
+echo "⏳ Waiting for services to start..."
 sleep 30
 
 # Check service status
-echo "Checking service status..."
-if [ -f docker-compose.prod.yml ]; then
-    docker-compose -f docker-compose.prod.yml ps
-else
-    docker-compose ps
-fi
+echo "📊 Service Status:"
+docker-compose ps
 
-# Setup reverse proxy (if needed)
-if [ ! -f /etc/nginx/sites-available/xburn ]; then
-    echo "Setting up Nginx reverse proxy..."
-    sudo tee /etc/nginx/sites-available/xburn > /dev/null <<EOT
-server {
-    listen 80;
-    server_name YOUR_DOMAIN;
+# Show logs for debugging
+echo "📋 Recent logs:"
+docker-compose logs --tail=20 indexer
 
-    location / {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-    location /api {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-    }
-}
-EOT
-
-    sudo ln -s /etc/nginx/sites-available/xburn /etc/nginx/sites-enabled/
-    sudo nginx -t && sudo systemctl reload nginx
-fi
-
-echo "Deployment completed successfully!"
-echo "Metabase dashboard: http://localhost:3001"
-echo "API health check: http://localhost:3000/health/chains"
+# Final status check
 echo ""
-echo "To view logs:"
-if [ -f docker-compose.prod.yml ]; then
-    echo "docker-compose -f docker-compose.prod.yml logs -f indexer"
+echo "🎉 Deployment Summary:"
+echo "================================"
+echo "Metabase Dashboard: http://$(hostname -I | awk '{print $1}'):3001"
+echo "API Health Check: http://$(hostname -I | awk '{print $1}'):3000/health/chains"
+echo ""
+echo "To view live logs:"
+echo "docker-compose logs -f indexer"
+echo ""
+echo "To check service status:"
+echo "docker-compose ps"
+echo ""
+
+# Check if indexer is running properly
+if docker-compose ps indexer | grep -q "Up"; then
+    echo "✅ Indexer is running successfully!"
 else
-    echo "docker-compose logs -f indexer"
-fi 
+    echo "❌ Indexer may have issues. Check logs with: docker-compose logs indexer"
+fi
+
+echo "🚀 Deployment completed!" 

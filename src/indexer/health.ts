@@ -14,7 +14,7 @@ export class IndexerHealthMonitor {
     private dbs: Map<string, Pool>;
     private rpcProviders: Map<string, RPCProvider>;
     private appChains: AppChainConfig[];
-    private checkInterval: NodeJS.Timeout | null = null;
+    private checkInterval: ReturnType<typeof setInterval> | null = null;
 
     constructor(dbs: Map<string, Pool>, rpcProviders: Map<string, RPCProvider>) {
         this.dbs = dbs;
@@ -69,11 +69,12 @@ export class IndexerHealthMonitor {
             const rpcLatencyMs = Date.now() - startTime;
 
             // Get last indexed block from database
-            const { rows: [chainData] } = await this.dbs.get(chainId)?.query(
+            const result = await this.dbs.get(chainId)?.query(
                 'SELECT last_indexed_block FROM chains WHERE chain_id = $1',
                 [chainId]
             );
-
+            
+            const chainData = result?.rows?.[0];
             const lastIndexedBlock = chainData?.last_indexed_block || 0;
             const blocksBehind = latestBlock - lastIndexedBlock;
 
@@ -144,8 +145,8 @@ export class IndexerHealthMonitor {
 
     async getChainHealthSummary() {
         try {
-            const { rows } = await this.dbs.get('System')?.query('SELECT * FROM chain_health ORDER BY chain_id');
-            return rows;
+            const result = await this.dbs.get('System')?.query('SELECT * FROM chain_health ORDER BY chain_id');
+            return result?.rows || [];
         } catch (error) {
             chainLogger.error('Error getting chain health summary', {
                 chainName: 'System',

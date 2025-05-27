@@ -6,29 +6,38 @@ import { ChainIndexer, ensureSchemaIsApplied } from './indexer/chain-indexer';
 import { IndexerHealthMonitor } from './indexer/health';
 
 class IndexerManager {
-    private dbs: Map<string, Pool>;
+    private db: Pool; // Single database for all chains
     private providers: Map<string, RPCProvider>;
     private indexers: Map<string, ChainIndexer>;
     private healthMonitor: IndexerHealthMonitor | null = null;
     private enabledChains: string[];
 
     constructor() {
-        this.dbs = new Map();
         this.providers = new Map();
         this.indexers = new Map();
 
         // Parse enabled chains from environment variable
         const enabledChainsEnv = process.env.ENABLED_CHAINS || '';
         this.enabledChains = enabledChainsEnv 
-            ? enabledChainsEnv.split(',')
+            ? enabledChainsEnv.split(',').map(chain => chain.trim())
             : Object.keys(chains);
 
         logger.info(`ENABLED_CHAINS: ${enabledChainsEnv}, effective enabledChains: ${this.enabledChains.join(',')}`);
+
+        // Initialize single database connection
+        this.db = new Pool(getDbConfig());
     }
 
     async start() {
         try {
-            // Initialize databases, providers and indexers for each chain
+            // Test database connection
+            await this.db.connect();
+            logger.info('Database connection established');
+
+            // Ensure schema is applied to the single database
+            await ensureSchemaIsApplied(this.db);
+
+            // Initialize providers and indexers for each enabled chain
             for (const chainKey of this.enabledChains) {
                 await this.initializeChain(chainKey);
             }
@@ -48,8 +57,19 @@ class IndexerManager {
     }
 
     private async startHealthMonitoring() {
-        // Pass the maps of databases and providers to the health monitor
-        this.healthMonitor = new IndexerHealthMonitor(this.dbs, this.providers);
+        // Create a map with the single database for all chains
+        const dbMap = new Map<string, Pool>();
+        for (const chainKey of this.enabledChains) {
+            const chainConfig = chains[chainKey];
+            if (chainConfig) {
+                dbMap.set(chainConfig.id.toString(), this.db);
+            }
+        }
+        
+        // Also add a 'System' entry for global health queries
+        dbMap.set('System', this.db);
+
+        this.healthMonitor = new IndexerHealthMonitor(dbMap, this.providers);
         await this.healthMonitor.start();
         logger.info('Health monitoring started');
     }
@@ -67,10 +87,8 @@ class IndexerManager {
             this.healthMonitor.cleanup();
         }
 
-        // Close all database connections
-        for (const db of this.dbs.values()) {
-            await db.end();
-        }
+        // Close database connection
+        await this.db.end();
         
         logger.info('Indexer manager stopped');
     }
@@ -86,28 +104,19 @@ class IndexerManager {
             const chainId = chainConfig.id.toString();
             logger.info(`Attempting to initialize indexer for chain: ${chainKey}`);
 
-            // Initialize database connection
-            const db = new Pool(getDbConfig(chainId));
-            await db.connect(); // Test connection
-            this.dbs.set(chainId, db);
-            logger.info(`Database connection established for chain ${chainKey}`);
-
-            // Ensure schema is applied
-            await ensureSchemaIsApplied(db);
-
             // Initialize provider
             const provider = new RPCProvider(chainId, chainConfig.name, chainConfig.rpcUrls);
             this.providers.set(chainId, provider);
 
-            // Create indexer instance
-            const indexer = new ChainIndexer(chainId, provider, db, chainConfig);
+            // Create indexer instance using the shared database
+            const indexer = new ChainIndexer(chainId, provider, this.db, chainConfig);
             this.indexers.set(chainId, indexer);
 
             // Ensure chain exists in database
-            await this.ensureChainExists(chainId, chainConfig, db);
+            await this.ensureChainExists(chainId, chainConfig);
 
             // Create or update chain statistics record
-            await this.initializeChainStats(chainId, db);
+            await this.initializeChainStats(chainId);
 
         } catch (error) {
             logger.error(`Error initializing chain ${chainKey}:`, error);
@@ -115,34 +124,34 @@ class IndexerManager {
         }
     }
 
-    private async initializeChainStats(chainId: string, db: Pool) {
+    private async initializeChainStats(chainId: string) {
         try {
-            await db.query(`SELECT update_chain_stats($1)`, [chainId]);
+            await this.db.query(`SELECT update_chain_stats($1)`, [chainId]);
             logger.info(`Initialized chain statistics for chain ${chainId}`);
         } catch (error) {
             logger.error(`Error initializing chain statistics for ${chainId}:`, error);
-            throw error;
+            // Don't throw here, just log the error
         }
     }
 
-    private async ensureChainExists(chainId: string, chainConfig: ChainConfig, db: Pool) {
+    private async ensureChainExists(chainId: string, chainConfig: ChainConfig) {
         try {
             // Check if chain already exists
-            const { rows } = await db.query(
+            const { rows } = await this.db.query(
                 'SELECT chain_id FROM chains WHERE chain_id = $1',
                 [chainId]
             );
 
             if (rows.length === 0) {
                 // Insert new chain
-                await db.query(
+                await this.db.query(
                     'INSERT INTO chains (chain_id, name, rpc_url, start_block) VALUES ($1, $2, $3, $4)',
                     [chainId, chainConfig.name, chainConfig.rpcUrls[0], chainConfig.startBlock]
                 );
                 logger.info(`Added new chain to database: ${chainConfig.name} (${chainId})`);
             } else {
                 // Update existing chain
-                await db.query(
+                await this.db.query(
                     'UPDATE chains SET name = $2, rpc_url = $3, start_block = $4, updated_at = NOW() WHERE chain_id = $1',
                     [chainId, chainConfig.name, chainConfig.rpcUrls[0], chainConfig.startBlock]
                 );

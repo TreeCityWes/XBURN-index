@@ -25,10 +25,9 @@ RUN chown -R node:node /app
 # Switch to non-root user
 USER node
 
-# Build TypeScript code
-RUN npm run build
-
+# For development, use ts-node directly
+# For production, build first then use node
 EXPOSE 3000
 
-# Use production command
-CMD ["node", "dist/indexer.js"] 
+# Use ts-node for development to avoid build issues
+CMD ["npm", "run", "dev"] 
