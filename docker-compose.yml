@@ -1,6 +1,6 @@
 networks:
-xburn_network:
-  driver: bridge
+  xburn_network:
+    driver: bridge
 
 services:
   postgres:
