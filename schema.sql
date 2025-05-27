@@ -113,15 +113,6 @@ CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_token_id ON burn_nft_positions
 CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_block_number ON burn_nft_positions(block_number);
 CREATE INDEX IF NOT EXISTS idx_burn_nft_positions_created_at ON burn_nft_positions(created_at);
 
--- Add foreign key constraints to existing tables
-ALTER TABLE xen_burns
-ADD CONSTRAINT fk_xen_burns_chain
-FOREIGN KEY (chain_id) REFERENCES chains(chain_id);
-
-ALTER TABLE burn_nft_positions
-ADD CONSTRAINT fk_burn_nft_positions_chain
-FOREIGN KEY (chain_id) REFERENCES chains(chain_id);
-
 -- Create indexes for new tables
 CREATE INDEX IF NOT EXISTS idx_token_prices_chain_timestamp ON token_prices(chain_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_chain_stats_updated_at ON chain_stats(updated_at);
