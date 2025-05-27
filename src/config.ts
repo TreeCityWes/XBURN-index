@@ -1,3 +1,10 @@
+// Node.js process type declaration
+declare const process: {
+  env: {
+    [key: string]: string | undefined;
+  };
+};
+
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 
 export interface ChainConfig {
@@ -44,7 +51,7 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0x32714eF2eD46EDa5C23C885462a9e439F4CBD7FF',
       xburnNft: '0x3b762aA4902e1D2b3CDb89B27E1BCF2012Edd22F'
     },
-    startBlock: 17000000,
+    startBlock: 22551915,
     gasPrice: '5'
   },
   polygon: {
@@ -64,7 +71,7 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0xF6143C6134Be3c3FD3431467D1252A2d18C89CDE',
       xburnNft: '0xe89AFDeFeBDba033f6e750615f0A0f1A37C78c4A'
     },
-    startBlock: 45000000,
+    startBlock: 71338833,
     gasPrice: '300'
   },
   optimism: {
@@ -82,7 +89,7 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0x9d16374c01Cf785b6dB5B02A830E00C40c5381D8',
       xburnNft: '0xd7dd1997ed8d5b836099e5d28fed1a9d8e9cc723'
     },
-    startBlock: 108000000,
+    startBlock: 135077350,
     gasPrice: '0.0001'
   },
   pulsechain: {
@@ -98,7 +105,7 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0xe89AFDeFeBDba033f6e750615f0A0f1A37C78c4A',
       xburnNft: '0x305C60D2fEf49FADfEe67EC530DE98f67bac861D'
     },
-    startBlock: 17000000,
+    startBlock: 23431230,
     gasPrice: '2500000'
   },
   bsc: {
@@ -119,7 +126,7 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0x12cf65e044a59e85f38497c413f24de6d33250ba',
       xburnNft: '0xf0ca18f2462936df8332f88c4cf27a03d829dbb2'
     },
-    startBlock: 40000000,
+    startBlock: 49882565,
     gasPrice: '0.1'
   },
   avalanche: {
@@ -139,7 +146,7 @@ export const chains: { [key: string]: ChainConfig } = {
       xburnMinter: '0xE2D8836925B8684F47CaD8A90fbC27868f5B3922',
       xburnNft: '0x32714eF2eD46EDa5C23C885462a9e439F4CBD7FF'
     },
-    startBlock: 30000000,
+    startBlock: 62267210,
     gasPrice: '25'
   }
 };
