@@ -48,5 +48,5 @@ cd /app && npm run init-db
 
 echo "✅ Initialization completed successfully!"
 
-# Exit explicitly with success code
-exit 0 
+# Force exit the script and kill any remaining processes
+kill -9 $$ || exit 0 
