@@ -4,12 +4,6 @@ import { chainLogger } from '../utils/logger';
 import { RPCProvider } from '../provider';
 import { ChainConfig as AppChainConfig, chains } from '../config';
 
-// Add Node.js types declaration
-declare global {
-    var setInterval: (callback: (...args: any[]) => void, ms: number) => NodeJS.Timeout;
-    var clearInterval: (intervalId: NodeJS.Timeout) => void;
-}
-
 export class IndexerHealthMonitor {
     private dbs: Map<string, Pool>;
     private rpcProviders: Map<string, RPCProvider>;
