@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { logger } from './utils/logger';
-import { chains, dbConfig } from './config';
+import { chains, dbConfig, ChainConfig } from './config';
 import { RPCProvider } from './provider';
 import { ChainIndexer, ensureSchemaIsApplied } from './indexer/chain-indexer';
 import { IndexerHealthMonitor } from './indexer/health';
@@ -106,7 +106,32 @@ class IndexerManager {
     }
 
     private async ensureChainExists(chainId: string, chainConfig: ChainConfig) {
-        // Implementation of ensureChainExists method
+        try {
+            // Check if chain already exists
+            const { rows } = await this.db.query(
+                'SELECT chain_id FROM chains WHERE chain_id = $1',
+                [chainId]
+            );
+
+            if (rows.length === 0) {
+                // Insert new chain
+                await this.db.query(
+                    'INSERT INTO chains (chain_id, name, rpc_url, start_block) VALUES ($1, $2, $3, $4)',
+                    [chainId, chainConfig.name, chainConfig.rpcUrls[0], chainConfig.startBlock]
+                );
+                logger.info(`Added new chain to database: ${chainConfig.name} (${chainId})`);
+            } else {
+                // Update existing chain
+                await this.db.query(
+                    'UPDATE chains SET name = $2, rpc_url = $3, start_block = $4, updated_at = NOW() WHERE chain_id = $1',
+                    [chainId, chainConfig.name, chainConfig.rpcUrls[0], chainConfig.startBlock]
+                );
+                logger.debug(`Updated existing chain in database: ${chainConfig.name} (${chainId})`);
+            }
+        } catch (error) {
+            logger.error(`Error ensuring chain exists in database for ${chainConfig.name}:`, error);
+            throw error;
+        }
     }
 }
 

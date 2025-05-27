@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { ChainConfig, indexerConfig } from './config';
+import { indexerConfig } from './config';
 import { chainLogger } from './utils/logger';
 
 interface ProviderHealth {
@@ -19,23 +19,27 @@ export class RPCProvider {
   private maxRetries: number;
   private retryDelay: number;
   private healthCheckInterval: NodeJS.Timeout | null = null;
-  private chainConfig: ChainConfig;
+  private chainId: string;
+  private chainName: string;
+  private rpcUrls: string[];
   private lastProviderSwitch: number = 0;
   private minSwitchInterval: number = indexerConfig.minProviderSwitchInterval;
   private currentProviderIndex: number = 0;
 
-  constructor(chainConfig: ChainConfig) {
-    this.chainConfig = chainConfig;
+  constructor(chainId: string, chainName: string, rpcUrls: string[]) {
+    this.chainId = chainId;
+    this.chainName = chainName;
+    this.rpcUrls = rpcUrls;
     this.providers = new Map();
     this.providerHealth = new Map();
     this.maxRetries = indexerConfig.maxRetries;
     this.retryDelay = indexerConfig.retryDelay;
     
     // Initialize providers and health tracking
-    chainConfig.rpcUrls.forEach(url => {
+    rpcUrls.forEach(url => {
       const provider = new ethers.JsonRpcProvider(url, {
-        chainId: chainConfig.id,
-        name: chainConfig.name
+        chainId: parseInt(chainId),
+        name: chainName
       });
       
       // Set polling interval
@@ -52,14 +56,14 @@ export class RPCProvider {
       });
     });
 
-    this.currentProviderUrl = chainConfig.rpcUrls[0];
+    this.currentProviderUrl = rpcUrls[0];
 
     // Start health checks
     this.startHealthChecks();
     
     chainLogger.info('Provider initialized', {
-      chainName: this.chainConfig.name,
-      message: `Initialized with ${chainConfig.rpcUrls.length} RPC endpoints`
+      chainName: this.chainName,
+      message: `Initialized with ${rpcUrls.length} RPC endpoints`
     });
   }
 
@@ -92,7 +96,7 @@ export class RPCProvider {
         health.currentBlock = blockNumber;
 
         chainLogger.debug('RPC health check success', {
-          chainName: this.chainConfig.name,
+          chainName: this.chainName,
           blockNumber,
           latency,
           message: `Provider ${url} is healthy`
@@ -104,7 +108,7 @@ export class RPCProvider {
         health.isHealthy = false;
 
         chainLogger.warn('RPC health check failed', {
-          chainName: this.chainConfig.name,
+          chainName: this.chainName,
           error,
           message: `Provider ${url} failed health check`
         });
@@ -147,12 +151,12 @@ export class RPCProvider {
       this.lastProviderSwitch = now;
 
       chainLogger.info('Switched RPC provider', {
-        chainName: this.chainConfig.name,
+        chainName: this.chainName,
         message: `Switched to ${newUrl}`
       });
     } else {
       chainLogger.warn('No healthy providers available', {
-        chainName: this.chainConfig.name,
+        chainName: this.chainName,
         message: 'Continuing with current provider despite issues'
       });
     }
@@ -181,7 +185,7 @@ export class RPCProvider {
         provider.destroy();
       } catch (error) {
         chainLogger.error('Error destroying provider', {
-          chainName: this.chainConfig.name,
+          chainName: this.chainName,
           error
         });
       }
