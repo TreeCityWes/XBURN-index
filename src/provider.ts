@@ -2,12 +2,6 @@ import { ethers } from 'ethers';
 import { indexerConfig } from './config';
 import { chainLogger } from './utils/logger';
 
-// Add NodeJS types declaration
-declare global {
-  var setInterval: (callback: (...args: any[]) => void, ms: number) => NodeJS.Timeout;
-  var clearInterval: (intervalId: NodeJS.Timeout) => void;
-}
-
 interface ProviderHealth {
   url: string;
   lastSuccess: number;
@@ -24,7 +18,7 @@ export class RPCProvider {
   private currentProviderUrl: string;
   private maxRetries: number;
   private retryDelay: number;
-  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private chainId: string;
   private chainName: string;
   private rpcUrls: string[];

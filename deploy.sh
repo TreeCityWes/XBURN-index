@@ -25,11 +25,42 @@ fi
 echo "Pulling latest changes..."
 git pull
 
-# Build and start services
+# Fix TypeScript errors in provider.ts
+echo "Fixing TypeScript errors..."
+if grep -q "NodeJS.Timeout" src/provider.ts; then
+    sed -i 's/private healthCheckInterval: NodeJS.Timeout | null = null;/private healthCheckInterval: ReturnType<typeof setInterval> | null = null;/g' src/provider.ts
+    sed -i '/declare global {/,/}/d' src/provider.ts
+    echo "Fixed TypeScript errors in provider.ts"
+fi
+
+# Create necessary directories
+echo "Creating log directory..."
+mkdir -p logs
+chmod 777 logs
+
+# Start postgres first to create metabase database
+echo "Starting postgres container..."
+docker-compose up -d postgres
+
+# Wait for postgres to be ready
+echo "Waiting for postgres to be healthy..."
+sleep 10
+
+# Create metabase database if it doesn't exist
+echo "Creating metabase database if needed..."
+docker-compose exec -T postgres psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname = 'metabase'" | grep -q 1 || docker-compose exec -T postgres psql -U postgres -c "CREATE DATABASE metabase;"
+
+# Build and start all services
 echo "Building and starting services..."
-docker-compose -f docker-compose.prod.yml pull
-docker-compose -f docker-compose.prod.yml build
-docker-compose -f docker-compose.prod.yml up -d
+if [ -f docker-compose.prod.yml ]; then
+    docker-compose -f docker-compose.prod.yml pull
+    docker-compose -f docker-compose.prod.yml build
+    docker-compose -f docker-compose.prod.yml up -d
+else
+    docker-compose pull
+    docker-compose build
+    docker-compose up -d
+fi
 
 # Wait for services to be healthy
 echo "Waiting for services to be healthy..."
@@ -37,7 +68,11 @@ sleep 30
 
 # Check service status
 echo "Checking service status..."
-docker-compose -f docker-compose.prod.yml ps
+if [ -f docker-compose.prod.yml ]; then
+    docker-compose -f docker-compose.prod.yml ps
+else
+    docker-compose ps
+fi
 
 # Setup reverse proxy (if needed)
 if [ ! -f /etc/nginx/sites-available/xburn ]; then
@@ -76,4 +111,8 @@ echo "Metabase dashboard: http://localhost:3001"
 echo "API health check: http://localhost:3000/health/chains"
 echo ""
 echo "To view logs:"
-echo "docker-compose -f docker-compose.prod.yml logs -f indexer" 
+if [ -f docker-compose.prod.yml ]; then
+    echo "docker-compose -f docker-compose.prod.yml logs -f indexer"
+else
+    echo "docker-compose logs -f indexer"
+fi 
