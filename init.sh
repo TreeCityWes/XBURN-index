@@ -46,7 +46,7 @@ psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f /app/schema.sql
 echo "🔧 Running TypeScript initialization..."
 cd /app && npm run init-db
 
-echo "✅ Initialization completed successfully!"
+echo "🎉 Database initialization completed successfully"
 
-# Force exit the script and kill any remaining processes
-kill -9 $$ || exit 0 
+# Ensure the script exits properly
+exec kill -9 1 
