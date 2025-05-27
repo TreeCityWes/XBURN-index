@@ -54,45 +54,16 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_SSL=false
-      
-      # Base Chain
-      - BASE_RPC_URL=${BASE_RPC_URL}
-      - START_BLOCK_BASE=${START_BLOCK_BASE:-29193678}
-      
-      # Ethereum Chain
-      - ETH_RPC_URL=${ETH_RPC_URL}
-      - START_BLOCK_ETHEREUM=${START_BLOCK_ETHEREUM:-17000000}
-      
-      # Polygon Chain
-      - POLYGON_RPC_URL=${POLYGON_RPC_URL}
-      - START_BLOCK_POLYGON=${START_BLOCK_POLYGON:-45000000}
-      
-      # Optimism Chain
-      - OPTIMISM_RPC_URL=${OPTIMISM_RPC_URL}
-      - START_BLOCK_OPTIMISM=${START_BLOCK_OPTIMISM:-108000000}
-      
-      # PulseChain
-      - PULSECHAIN_RPC_URL=${PULSECHAIN_RPC_URL}
-      - START_BLOCK_PULSECHAIN=${START_BLOCK_PULSECHAIN:-17000000}
-      
-      # BSC
-      - BSC_RPC_URL=${BSC_RPC_URL}
-      - START_BLOCK_BSC=${START_BLOCK_BSC:-28000000}
-      
-      # Avalanche
-      - AVALANCHE_RPC_URL=${AVALANCHE_RPC_URL}
-      - START_BLOCK_AVALANCHE=${START_BLOCK_AVALANCHE:-30000000}
-      
+      # Alchemy API Key
+      - ALCHEMY_API_KEY=${ALCHEMY_API_KEY}
       # Enable all chains by default
       - ENABLED_CHAINS=base,ethereum,polygon,optimism,pulsechain,bsc,avalanche
-      
       # Indexer configuration
       - INDEXER_INTERVAL_MS=15000
       - BATCH_SIZE=5
       - MAX_RETRIES=10
       - RETRY_DELAY=5000
       - MAX_BACKOFF_DELAY=60000
-      
       # Application settings
       - API_PORT=3000
       - LOG_LEVEL=info
