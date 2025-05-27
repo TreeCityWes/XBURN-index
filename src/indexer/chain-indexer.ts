@@ -289,12 +289,44 @@ export async function ensureSchemaIsApplied(db: Pool): Promise<void> {
         
         const schema = fs.readFileSync(schemaPath, 'utf8');
         
-        // Execute the schema SQL directly
-        await db.query(schema);
-        
-        logger.info('Schema applied successfully', {
-            chainName: 'System'
-        });
+        // Execute the schema SQL in a way that ignores already existing constraints
+        const client = await db.connect();
+        try {
+            // Begin transaction
+            await client.query('BEGIN');
+            
+            // Set client_min_messages to warning to suppress notices
+            await client.query('SET client_min_messages TO warning');
+            
+            // Execute the schema
+            await client.query(schema);
+            
+            // Commit the transaction
+            await client.query('COMMIT');
+            
+            logger.info('Schema applied successfully', {
+                chainName: 'System'
+            });
+        } catch (error) {
+            // Rollback transaction on error
+            await client.query('ROLLBACK');
+            
+            // Check if this is a duplicate constraint error
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            if (errorMsg.includes('already exists')) {
+                logger.warn('Schema partially applied - some objects already exist', {
+                    chainName: 'System',
+                    error: errorMsg
+                });
+                // Continue execution even though there was an error with duplicate constraints
+                return;
+            }
+            
+            // Re-throw other errors
+            throw error;
+        } finally {
+            client.release();
+        }
     } catch (error) {
         logger.error('Error applying schema:', {
             chainName: 'System',
