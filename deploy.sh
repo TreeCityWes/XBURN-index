@@ -84,6 +84,10 @@ chmod 777 logs
 echo "🛑 Stopping existing containers..."
 docker-compose down --remove-orphans
 
+# Remove old volumes to ensure clean state
+echo "🧹 Cleaning up old volumes..."
+docker volume rm backend_postgres_data backend_metabase_data 2>/dev/null || true
+
 # Start postgres first
 echo "🐘 Starting PostgreSQL..."
 docker-compose up -d postgres
@@ -148,8 +152,25 @@ echo ""
 # Check if indexer is running properly
 if docker-compose ps indexer | grep -q "Up"; then
     echo "✅ Indexer is running successfully!"
+    
+    # Show chain health status
+    echo ""
+    echo "📊 Checking chain health status..."
+    sleep 10
+    curl -s http://localhost:3000/health/chains | jq . 2>/dev/null || echo "Health endpoint not ready yet"
 else
     echo "❌ Indexer may have issues. Check logs with: docker-compose logs indexer"
+    echo ""
+    echo "Recent error logs:"
+    docker-compose logs --tail=50 indexer | grep -i error || true
 fi
 
-echo "🚀 Deployment completed!" 
+echo ""
+echo "🚀 Deployment completed!"
+echo ""
+echo "📝 Quick Commands:"
+echo "  View logs: docker-compose logs -f indexer"
+echo "  Check status: docker-compose ps"
+echo "  View stats: docker-compose exec indexer npm run show-stats"
+echo "  Stop all: docker-compose down"
+echo "  Restart: docker-compose restart indexer" 

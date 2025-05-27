@@ -327,10 +327,11 @@ CREATE OR REPLACE FUNCTION update_user_stats(
 RETURNS void AS $$
 DECLARE
     table_name VARCHAR;
+    query_text TEXT;
 BEGIN
     table_name := 'chain_' || p_chain_id || '_user_stats';
     
-    EXECUTE format('
+    query_text := format('
         INSERT INTO %I (
             user_address, 
             total_xen_burned, 
@@ -356,7 +357,9 @@ BEGIN
             updated_at = NOW()',
         table_name, table_name, table_name, table_name, table_name, 
         table_name, table_name, table_name, table_name
-    ) USING 
+    );
+    
+    EXECUTE query_text USING 
         p_user_address, p_xen_burned, p_burn_count, p_nft_position_count, 
         p_xen_locked, p_swap_burn_count, p_xen_swapped, p_timestamp;
 END;
