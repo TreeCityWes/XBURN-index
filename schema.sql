@@ -501,13 +501,16 @@ END $$;
 CREATE OR REPLACE FUNCTION create_top_burns_view(chain_id_param VARCHAR(10))
 RETURNS void AS $$
 BEGIN
+    -- Drop view if exists to avoid conflicts
+    EXECUTE format('DROP VIEW IF EXISTS top_burns_%s CASCADE', chain_id_param);
+    
     EXECUTE format('
-        CREATE OR REPLACE VIEW top_burns_%s AS
+        CREATE VIEW top_burns_%s AS
         SELECT 
             from_address,
             amount,
             tx_hash,
-            block_timestamp,
+            block_timestamp::timestamp as block_timestamp,
             block_number
         FROM chain_%s_xen_burns
         ORDER BY amount DESC
@@ -520,17 +523,20 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION create_daily_burns_view(chain_id_param VARCHAR(10))
 RETURNS void AS $$
 BEGIN
+    -- Drop view if exists to avoid conflicts
+    EXECUTE format('DROP VIEW IF EXISTS daily_burns_%s CASCADE', chain_id_param);
+    
     EXECUTE format('
-        CREATE OR REPLACE VIEW daily_burns_%s AS
+        CREATE VIEW daily_burns_%s AS
         SELECT 
-            DATE_TRUNC(''day'', block_timestamp) as burn_date,
+            DATE_TRUNC(''day'', block_timestamp::timestamp) as burn_date,
             COUNT(*) as num_burns,
             SUM(amount) as total_amount_burned,
             COUNT(DISTINCT from_address) as unique_burners,
             AVG(amount) as avg_burn_amount,
             MAX(amount) as max_burn_amount
         FROM chain_%s_xen_burns
-        GROUP BY DATE_TRUNC(''day'', block_timestamp)
+        GROUP BY DATE_TRUNC(''day'', block_timestamp::timestamp)
         ORDER BY burn_date DESC
     ', chain_id_param, chain_id_param);
 END;
