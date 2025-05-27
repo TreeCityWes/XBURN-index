@@ -411,6 +411,9 @@ BEGIN
         LIMIT 1', burn_table
     ) INTO v_biggest_burn_amount, v_biggest_burn_tx_hash, v_biggest_burn_address, v_biggest_burn_timestamp;
     
+    -- Ensure biggest_burn_amount is 0 if no burn record was found
+    v_biggest_burn_amount := COALESCE(v_biggest_burn_amount, 0);
+    
     -- Update or insert chain stats
     EXECUTE format('
         INSERT INTO %I (
