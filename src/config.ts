@@ -36,9 +36,7 @@ export const chains: { [key: string]: ChainConfig } = {
     name: 'Ethereum',
     rpcUrls: [
       `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
-      'https://eth-mainnet.public.blastapi.io',
-      'https://rpc.ankr.com/eth',
-      'https://cloudflare-eth.com'
+      'https://eth-mainnet.public.blastapi.io'
     ],
     contracts: {
       xen: '0x06450dEe7FD2Fb8E39061434BAbCFC05599a6Fb8',
@@ -54,7 +52,6 @@ export const chains: { [key: string]: ChainConfig } = {
     rpcUrls: [
       `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://polygon-rpc.com',
-      'https://rpc.ankr.com/polygon',
       'https://polygon-bor.publicnode.com'
     ],
     contracts: {
@@ -71,7 +68,6 @@ export const chains: { [key: string]: ChainConfig } = {
     rpcUrls: [
       `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://mainnet.optimism.io',
-      'https://rpc.ankr.com/optimism',
       'https://optimism.publicnode.com'
     ],
     contracts: {
@@ -102,9 +98,8 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 56,
     name: 'BSC',
     rpcUrls: [
-      'https://bsc-dataseed1.binance.org',
-      'https://bsc-dataseed2.binance.org',
-      'https://bsc-dataseed3.binance.org'
+      'https://bsc.publicnode.com',
+      'https://binance.nodereal.io'
     ],
     contracts: {
       xen: '0x2AB0e9e4eE70FFf1fB9D67031E44F6410170d00e',
@@ -118,8 +113,8 @@ export const chains: { [key: string]: ChainConfig } = {
     id: 43114,
     name: 'Avalanche',
     rpcUrls: [
+      `https://avax-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       'https://api.avax.network/ext/bc/C/rpc',
-      'https://rpc.ankr.com/avalanche',
       'https://avalanche-evm.publicnode.com'
     ],
     contracts: {
